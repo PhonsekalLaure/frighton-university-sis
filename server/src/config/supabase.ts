@@ -1,45 +1,32 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { config } from './env.js';
 
-let supabaseClient: SupabaseClient | null = null;
 let supabaseAdminClient: SupabaseClient | null = null;
+const authOptions = { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false };
 
-/**
- * Returns the standard Supabase client (using anon key).
- * Suitable for operations scoped to user credentials.
- */
-export const getSupabase = (): SupabaseClient => {
-  if (!supabaseClient) {
-    if (!config.supabase.url || !config.supabase.anonKey) {
-      console.warn('⚠️ Supabase URL or Anon Key is missing. Check your environment variables.');
-    }
-    supabaseClient = createClient(
-      config.supabase.url || 'https://placeholder.supabase.co',
-      config.supabase.anonKey || 'placeholder-anon-key'
-    );
+function requireConfig(key: string): void {
+  if (!config.supabase.url || !key || config.supabase.url.includes('your-project-id')) {
+    throw new Error('Supabase authentication is not configured.');
   }
-  return supabaseClient;
+}
+
+// Each login and refresh gets an isolated client so sessions cannot mix.
+export const createSupabaseAuthClient = (): SupabaseClient => {
+  requireConfig(config.supabase.anonKey);
+  return createClient(config.supabase.url, config.supabase.anonKey, { auth: authOptions });
 };
 
-/**
- * Returns the Supabase Admin client (using service role key).
- * Bypasses RLS - use only for server-side administrative logic.
- */
 export const getSupabaseAdmin = (): SupabaseClient => {
   if (!supabaseAdminClient) {
-    if (!config.supabase.url || !config.supabase.serviceRoleKey) {
-      console.warn('⚠️ Supabase Service Role Key is missing. Administrative operations will fail.');
-    }
-    supabaseAdminClient = createClient(
-      config.supabase.url || 'https://placeholder.supabase.co',
-      config.supabase.serviceRoleKey || 'placeholder-service-key',
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    requireConfig(config.supabase.serviceRoleKey);
+    supabaseAdminClient = createClient(config.supabase.url, config.supabase.serviceRoleKey, {
+      auth: authOptions,
+    });
   }
   return supabaseAdminClient;
+};
+
+// Backwards-compatible alias for standard Supabase client operations
+export const getSupabase = (): SupabaseClient => {
+  return createSupabaseAuthClient();
 };
