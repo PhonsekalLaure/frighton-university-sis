@@ -11,6 +11,10 @@ export const errorHandler = (
     res.status(err.status).json({ error: err.message });
     return;
   }
+  if (err.status && err.status >= 400 && err.status < 600) {
+    res.status(err.status).json({ error: err.message });
+    return;
+  }
   if (err.status === 413) {
     res.status(413).json({ error: 'Request body is too large.' });
     return;

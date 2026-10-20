@@ -4,6 +4,7 @@ import { config } from './config/env.js';
 import { authRouter } from './routes/authRoutes.js';
 import { healthRouter } from './routes/healthRoutes.js';
 import { integrationRouter } from './routes/integrationRoutes.js';
+import { dashboardRouter } from './routes/dashboardRoutes.js';
 import { protectCookieRequests } from './middlewares/auth.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 
@@ -31,6 +32,7 @@ export const createApp = (): Express => {
   app.use('/api/health', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/v1/integration', integrationRouter);
+  app.use('/api/v1/dashboard', dashboardRouter);
 
   // Centralized Error Handling
   app.use(errorHandler);

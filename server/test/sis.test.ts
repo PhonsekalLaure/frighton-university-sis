@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createApp } from '../src/app.js';
 import { findUser, AuthError } from '../src/services/authService.js';
+import { DashboardClient, getDashboard } from '../src/services/dashboardService.js';
 import { readAccessToken, readCookie, setAuthCookies, clearAuthCookies } from '../src/utils/authCookies.js';
 import type { Request, Response } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -213,6 +214,70 @@ describe('SIS Backend Foundation & Security Verification', () => {
       async () => await findUser(mockUser, mockAdminClient),
       (err: any) => err instanceof AuthError && err.status === 403
     );
+  });
+
+  test('9. Dashboard requires an authenticated SIS session', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/dashboard/me`);
+    assert.equal(res.status, 401);
+    const data = await res.json();
+    assert.equal(data.error, 'Please sign in to access your account.');
+  });
+
+  test('10. Dashboard aggregates profile, academic assignments, holds, and billing without enrollment data', async () => {
+    const results: Record<string, unknown> = {
+      profiles: {
+        id: 'student-1', frighton_id: 'STU-2026-0001', first_name: 'Jane', last_name: 'Student',
+        email: 'jane@frighton.edu', department: 'Computing', program: 'BSCS', year_level: 2,
+        academic_status: 'active', avatar_url: null,
+      },
+      academic_terms: { id: 'term-1', code: '2026-1', name: 'First Semester 2026', start_date: '2026-08-01', end_date: '2026-12-20' },
+      academic_records: [
+        {
+          grade: 'IP', is_current: true,
+          section: {
+            schedule: 'Tue 09:00-10:30', room: 'A-101', instructor_name: 'Dr. Ada', instructor_email: 'ada@frighton.edu',
+            course: { course_code: 'CS201', title: 'Data Structures', credits: 3 },
+            term: { id: 'term-1', code: '2026-1', name: 'First Semester 2026' },
+          },
+        },
+        {
+          grade: 'A', is_current: false,
+          section: {
+            schedule: 'Mon 13:00-14:30', room: 'B-201', instructor_name: 'Dr. Turing', instructor_email: null,
+            course: { course_code: 'CS101', title: 'Programming I', credits: 4 },
+            term: { id: 'term-0', code: '2025-2', name: 'Second Semester 2025' },
+          },
+        },
+      ],
+      student_holds: [{ id: 'hold-1', hold_type: 'library_debt', reason: 'Overdue book', placed_by_system: 'Frighton LMS', placed_at: '2026-10-01T00:00:00Z' }],
+      student_accounts: { id: 'account-1', base_tuition: '4500', mandatory_fees: '350', scholarships: '100', status: 'open', due_date: '2026-11-01' },
+      student_payments: [{ amount: '500' }],
+    };
+
+    const mockClient: DashboardClient = {
+      from: (table: string) => {
+        const result = results[table] ?? null;
+        const builder: any = {
+          select: () => builder,
+          eq: () => builder,
+          is: () => builder,
+          maybeSingle: async () => ({ data: result, error: null }),
+          then: (onfulfilled: any, onrejected: any) => Promise.resolve({ data: result, error: null }).then(onfulfilled, onrejected),
+        };
+        return builder;
+      },
+    };
+
+    const dashboard = await getDashboard('student-1', mockClient, new Date('2026-10-20T12:00:00.000Z'));
+    assert.equal(dashboard.profile.fullName, 'Jane Student');
+    assert.equal(dashboard.metrics.currentAcademicCredits, 3);
+    assert.equal(dashboard.metrics.cumulativeGpa, 4);
+    assert.equal(dashboard.metrics.creditsEarned, 4);
+    assert.equal(dashboard.metrics.activeHolds, 1);
+    assert.equal(dashboard.billing.totalBilled, 4750);
+    assert.equal(dashboard.billing.outstandingBalance, 4250);
+    assert.equal(dashboard.todaySchedule.length, 1);
+    assert.equal(dashboard.todaySchedule[0].courseCode, 'CS201');
   });
 
   test('Teardown server', async () => {
