@@ -5,15 +5,9 @@ export type SISRole = 'student' | 'admin';
 
 export interface SISUser {
   id: string;
-  frightonId: string;
   email: string;
-  firstName: string;
-  lastName: string;
   fullName: string;
   role: SISRole;
-  academicStatus: string;
-  department?: string;
-  avatarUrl?: string;
 }
 
 export class AuthError extends Error {
@@ -26,61 +20,46 @@ export class AuthError extends Error {
 }
 
 export async function findUser(user: User, adminClient: SupabaseClient = getSupabaseAdmin()): Promise<SISUser> {
-  if (!user.email) {
-    throw new AuthError(400, 'User email is required.');
+  if (!user.email || !user.email_confirmed_at) {
+    throw new AuthError(403, 'Please verify your university email before signing in.');
   }
 
-  // Primary lookup: link by auth user UUID
-  let { data: profile, error } = await adminClient
-    .from('profiles')
-    .select('id, frighton_id, first_name, last_name, email, role, academic_status, department, avatar_url')
-    .eq('id', user.id)
+  // Match the LMS account model: Supabase Auth validates credentials, then the
+  // shared public.users record determines portal access and account status.
+  const email = user.email.replace(/[\\%_]/g, '\\$&');
+  const { data: account, error } = await adminClient
+    .from('users')
+    .select('users_id,email,first_name,middle_name,last_name,role,is_active')
+    .ilike('email', email)
     .maybeSingle();
-
-  // Secondary lookup: fallback to email if UUID is not yet linked
-  if (!profile && !error && user.email) {
-    const escapedEmail = user.email.replace(/[\\%_]/g, '\\$&');
-    const res = await adminClient
-      .from('profiles')
-      .select('id, frighton_id, first_name, last_name, email, role, academic_status, department, avatar_url')
-      .ilike('email', escapedEmail)
-      .maybeSingle();
-    profile = res.data;
-    error = res.error;
-  }
 
   if (error) {
     throw new AuthError(503, 'Account verification is temporarily unavailable. Please try again.');
   }
 
-  if (!profile) {
-    throw new AuthError(404, 'No university SIS profile found for this account. Please contact Administration.');
+  // The shared LMS table stores its student role as "Students". Normalize it
+  // to SIS's singular student role without changing the shared table contract.
+  const accountRole = typeof account?.role === 'string' ? account.role.toLowerCase() : '';
+  const rawRole: SISRole | undefined = accountRole === 'students' || accountRole === 'student'
+    ? 'student'
+    : accountRole === 'admin'
+      ? 'admin'
+      : undefined;
+
+  // The SIS intentionally admits a different subset from the LMS: students and admins.
+  if (!account || !rawRole) {
+    throw new AuthError(403, 'This portal is restricted to active students and administrators.');
   }
 
-  const rawRole = (profile.role || '').toLowerCase();
-
-  // Restricted Access: Only students and administrators can login to SIS
-  if (rawRole !== 'student' && rawRole !== 'admin') {
-    throw new AuthError(403, 'This portal is restricted to students and administrators only.');
-  }
-
-  // Academic standing check for students
-  const academicStatus = (profile.academic_status || 'active').toLowerCase();
-  if (rawRole === 'student' && (academicStatus === 'suspended' || academicStatus === 'withdrawn')) {
-    throw new AuthError(403, `Your student account is marked as ${academicStatus}. Please contact the Registrar.`);
+  if (account.is_active !== true) {
+    throw new AuthError(403, 'Your university account has been deactivated. Please contact Administration.');
   }
 
   return {
-    id: profile.id,
-    frightonId: profile.frighton_id,
-    email: profile.email || user.email,
-    firstName: profile.first_name,
-    lastName: profile.last_name,
-    fullName: `${profile.first_name} ${profile.last_name}`.trim(),
-    role: rawRole as SISRole,
-    academicStatus: profile.academic_status,
-    department: profile.department ?? undefined,
-    avatarUrl: profile.avatar_url ?? undefined,
+    id: account.users_id,
+    email: account.email,
+    fullName: [account.first_name, account.middle_name, account.last_name].filter(Boolean).join(' '),
+    role: rawRole,
   };
 }
 

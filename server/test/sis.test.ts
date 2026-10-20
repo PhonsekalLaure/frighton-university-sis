@@ -126,93 +126,92 @@ describe('SIS Backend Foundation & Security Verification', () => {
     assert.equal(Object.keys(cookiesSet).length, 0);
   });
 
-  test('8. Role Restriction in findUser: only students and admins are allowed', async () => {
-    let mockProfile: any = null;
+  test('8. SIS access uses the shared active users table and permits only students and admins', async () => {
+    let mockAccount: any = null;
 
     const mockAdminClient = {
       from: () => ({
         select: () => ({
-          eq: () => ({
-            maybeSingle: async () => ({ data: mockProfile, error: null }),
-          }),
           ilike: () => ({
-            maybeSingle: async () => ({ data: mockProfile, error: null }),
+            maybeSingle: async () => ({ data: mockAccount, error: null }),
           }),
         }),
       }),
     } as unknown as SupabaseClient;
 
-    const mockUser = { id: 'user-1', email: 'user@frighton.edu' } as any;
+    const mockUser = { id: 'auth-user-1', email: 'user@frighton.edu', email_confirmed_at: '2026-10-20T00:00:00.000Z' } as any;
 
     // Scenario A: Student role -> Allowed
-    mockProfile = {
-      id: 'user-1',
-      frighton_id: 'STU-2026-0001',
+    mockAccount = {
+      users_id: 'user-1',
       first_name: 'John',
+      middle_name: null,
       last_name: 'Doe',
       email: 'user@frighton.edu',
-      role: 'student',
-      academic_status: 'active',
+      role: 'Students',
+      is_active: true,
     };
     const studentUser = await findUser(mockUser, mockAdminClient);
     assert.equal(studentUser.role, 'student');
-    assert.equal(studentUser.frightonId, 'STU-2026-0001');
+    assert.equal(studentUser.id, 'user-1');
+    assert.equal(studentUser.fullName, 'John Doe');
 
     // Scenario B: Admin role -> Allowed
-    mockProfile = {
-      id: 'user-1',
-      frighton_id: 'ADM-2026-0001',
+    mockAccount = {
+      users_id: 'user-2',
       first_name: 'Alice',
+      middle_name: 'L.',
       last_name: 'Admin',
       email: 'admin@frighton.edu',
       role: 'admin',
-      academic_status: 'active',
+      is_active: true,
     };
     const adminUser = await findUser(mockUser, mockAdminClient);
     assert.equal(adminUser.role, 'admin');
+    assert.equal(adminUser.fullName, 'Alice L. Admin');
 
     // Scenario C: Instructor role -> Rejected (403)
-    mockProfile = {
-      id: 'user-1',
-      frighton_id: 'FAC-2026-0001',
+    mockAccount = {
+      users_id: 'user-3',
       first_name: 'Prof',
+      middle_name: null,
       last_name: 'Severus',
       email: 'prof@frighton.edu',
       role: 'instructor',
-      academic_status: 'active',
+      is_active: true,
     };
     await assert.rejects(
       async () => await findUser(mockUser, mockAdminClient),
-      (err: any) => err instanceof AuthError && err.status === 403 && err.message.includes('restricted to students and administrators')
+      (err: any) => err instanceof AuthError && err.status === 403 && err.message.includes('restricted to active students and administrators')
     );
 
     // Scenario D: Registrar role -> Rejected (403)
-    mockProfile.role = 'registrar';
+    mockAccount.role = 'registrar';
     await assert.rejects(
       async () => await findUser(mockUser, mockAdminClient),
-      (err: any) => err instanceof AuthError && err.status === 403 && err.message.includes('restricted to students and administrators')
+      (err: any) => err instanceof AuthError && err.status === 403 && err.message.includes('restricted to active students and administrators')
     );
 
-    // Scenario E: Suspended Student -> Rejected (403)
-    mockProfile = {
-      id: 'user-1',
-      frighton_id: 'STU-2026-0002',
-      first_name: 'Suspended',
+    // Scenario E: Deactivated account -> Rejected (403)
+    mockAccount = {
+      users_id: 'user-4',
+      first_name: 'Deactivated',
+      middle_name: null,
       last_name: 'Student',
-      email: 'suspended@frighton.edu',
+      email: 'deactivated@frighton.edu',
       role: 'student',
-      academic_status: 'suspended',
+      is_active: false,
     };
     await assert.rejects(
       async () => await findUser(mockUser, mockAdminClient),
-      (err: any) => err instanceof AuthError && err.status === 403 && err.message.includes('suspended')
+      (err: any) => err instanceof AuthError && err.status === 403 && err.message.includes('deactivated')
     );
 
-    // Scenario F: Profile Not Found -> Rejected (404)
-    mockProfile = null;
+    // Scenario F: No matching university account -> Rejected (403)
+    mockAccount = null;
     await assert.rejects(
       async () => await findUser(mockUser, mockAdminClient),
-      (err: any) => err instanceof AuthError && err.status === 404
+      (err: any) => err instanceof AuthError && err.status === 403
     );
   });
 

@@ -21,9 +21,9 @@ VALUES
 ON CONFLICT (course_code) DO NOTHING;
 
 -- 3. Seed Course Sections
-INSERT INTO public.course_sections (id, course_id, term_id, section_number, schedule, room, capacity)
+INSERT INTO public.course_sections (id, course_id, term_id, section_number, instructor_name, instructor_email, schedule, room)
 VALUES
-    ('s0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', '01', 'Mon/Wed 09:00 - 10:30 AM', 'Turing Hall 101', 35),
-    ('s0000000-0000-0000-0000-000000000002', 'c0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', '01', 'Tue/Thu 11:00 - 12:30 PM', 'Lovelace Lab 204', 30),
-    ('s0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001', '01', 'Fri 13:00 - 16:00 PM', 'Grimoire Amphitheater', 50)
+    ('s0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', '01', 'Dr. Ada Lovelace', 'ada.lovelace@frighton.edu', 'Mon/Wed 09:00 - 10:30 AM', 'Turing Hall 101'),
+    ('s0000000-0000-0000-0000-000000000002', 'c0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', '01', 'Dr. Alan Turing', 'alan.turing@frighton.edu', 'Tue/Thu 11:00 - 12:30 PM', 'Lovelace Lab 204'),
+    ('s0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001', '01', 'Prof. Mina Harker', 'mina.harker@frighton.edu', 'Fri 13:00 - 16:00 PM', 'Grimoire Amphitheater')
 ON CONFLICT (course_id, term_id, section_number) DO NOTHING;
