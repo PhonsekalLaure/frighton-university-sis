@@ -1,4 +1,4 @@
-import type { User } from '@supabase/supabase-js';
+import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '../config/supabase.js';
 
 export type SISRole = 'student' | 'admin';
@@ -25,15 +25,13 @@ export class AuthError extends Error {
   }
 }
 
-export async function findUser(user: User): Promise<SISUser> {
+export async function findUser(user: User, adminClient: SupabaseClient = getSupabaseAdmin()): Promise<SISUser> {
   if (!user.email) {
     throw new AuthError(400, 'User email is required.');
   }
 
-  const supabase = getSupabaseAdmin();
-
   // Primary lookup: link by auth user UUID
-  let { data: profile, error } = await supabase
+  let { data: profile, error } = await adminClient
     .from('profiles')
     .select('id, frighton_id, first_name, last_name, email, role, academic_status, department, avatar_url')
     .eq('id', user.id)
@@ -42,7 +40,7 @@ export async function findUser(user: User): Promise<SISUser> {
   // Secondary lookup: fallback to email if UUID is not yet linked
   if (!profile && !error && user.email) {
     const escapedEmail = user.email.replace(/[\\%_]/g, '\\$&');
-    const res = await supabase
+    const res = await adminClient
       .from('profiles')
       .select('id, frighton_id, first_name, last_name, email, role, academic_status, department, avatar_url')
       .ilike('email', escapedEmail)
@@ -86,13 +84,13 @@ export async function findUser(user: User): Promise<SISUser> {
   };
 }
 
-export async function verifyUser(token: string): Promise<SISUser> {
-  const { data, error } = await getSupabaseAdmin().auth.getUser(token);
+export async function verifyUser(token: string, adminClient: SupabaseClient = getSupabaseAdmin()): Promise<SISUser> {
+  const { data, error } = await adminClient.auth.getUser(token);
   if (error || !data.user) {
     if (error && (!error.status || error.status >= 500)) {
       throw new AuthError(503, 'Authentication is temporarily unavailable. Please try again.');
     }
     throw new AuthError(401, 'Your session has expired. Please sign in again.');
   }
-  return findUser(data.user);
+  return findUser(data.user, adminClient);
 }
