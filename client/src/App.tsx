@@ -190,7 +190,7 @@ export function App() {
               <tbody>
                 <tr>
                   <td><code>profiles</code></td>
-                  <td>id, frighton_id, first_name, last_name, role, academic_status</td>
+                  <td>id, student_number, first_name, last_name, role, academic_status</td>
                   <td>Users linked 1:1 with Supabase Auth (students, instructors, admins)</td>
                 </tr>
                 <tr>
@@ -238,7 +238,7 @@ export function App() {
                 type="text" 
                 value={testId} 
                 onChange={(e) => setTestId(e.target.value)}
-                placeholder="Enter Frighton ID (e.g. STU-2026-0001)"
+                placeholder="Enter Student Number (e.g. STU-2026-0001)"
                 style={{
                   background: '#05070a',
                   border: '1px solid var(--border-color)',

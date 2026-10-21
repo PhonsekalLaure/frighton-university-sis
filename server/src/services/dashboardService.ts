@@ -61,7 +61,7 @@ export async function getDashboard(
 ) {
   const [profileResult, termResult, recordsResult, holdsResult] = await Promise.all([
     client.from('profiles')
-      .select('id, frighton_id, first_name, last_name, email, department, program, year_level, academic_status, avatar_url')
+      .select('id, student_number, first_name, last_name, email, department, program, year_level, academic_status, avatar_url')
       .eq('id', studentId)
       .maybeSingle(),
     client.from('academic_terms')
@@ -160,7 +160,8 @@ export async function getDashboard(
   return {
     profile: {
       id: profile.id,
-      frightonId: profile.frighton_id,
+      studentNumber: profile.student_number ?? profile.frighton_id,
+      frightonId: profile.student_number ?? profile.frighton_id,
       fullName: [profile.first_name, profile.last_name].filter(Boolean).join(' '),
       email: profile.email,
       department: profile.department,

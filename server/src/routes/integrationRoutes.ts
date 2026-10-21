@@ -22,24 +22,24 @@ const requireIntegrationApiKey = (req: Request, res: Response, next: NextFunctio
 integrationRouter.use(requireIntegrationApiKey);
 
 /**
- * GET /api/v1/integration/students/:frightonId/status
+ * GET /api/v1/integration/students/:studentNumber/status
  * Used by the Library Management System to check if a student or faculty member is actively enrolled,
  * has any blocking holds, or is in good academic standing before borrowing books.
  */
-integrationRouter.get('/students/:frightonId/status', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+integrationRouter.get(['/students/:studentNumber/status', '/students/:frightonId/status'], async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { frightonId } = req.params;
+    const studentNumber = req.params.studentNumber || req.params.frightonId;
     const supabaseAdmin = getSupabaseAdmin();
 
     const { data: profile, error } = await supabaseAdmin
       .from('profiles')
-      .select('id, frighton_id, first_name, last_name, email, role, academic_status, department')
-      .eq('frighton_id', frightonId)
+      .select('id, student_number, first_name, last_name, email, role, academic_status, department')
+      .eq('student_number', studentNumber)
       .single();
 
     if (error || !profile) {
       res.status(404).json({
-        error: `Entity with ID ${frightonId} not found in Frighton University SIS`,
+        error: `Entity with ID ${studentNumber} not found in Frighton University SIS`,
       });
       return;
     }
@@ -52,7 +52,8 @@ integrationRouter.get('/students/:frightonId/status', async (req: Request, res: 
       .is('resolved_at', null);
 
     res.json({
-      frightonId: profile.frighton_id,
+      studentNumber: profile.student_number,
+      frightonId: profile.student_number,
       name: `${profile.first_name} ${profile.last_name}`,
       email: profile.email,
       role: profile.role,
@@ -73,10 +74,11 @@ integrationRouter.get('/students/:frightonId/status', async (req: Request, res: 
  */
 integrationRouter.post('/holds', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { frightonId, reason, amount } = req.body;
+    const studentNumber = req.body.studentNumber || req.body.frightonId;
+    const { reason, amount } = req.body;
 
-    if (!frightonId || !reason) {
-      res.status(400).json({ error: 'frightonId and reason are required' });
+    if (!studentNumber || !reason) {
+      res.status(400).json({ error: 'studentNumber (or frightonId) and reason are required' });
       return;
     }
 
@@ -86,11 +88,11 @@ integrationRouter.post('/holds', async (req: Request, res: Response, next: NextF
     const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('id')
-      .eq('frighton_id', frightonId)
+      .eq('student_number', studentNumber)
       .single();
 
     if (!profile) {
-      res.status(404).json({ error: `Student with ID ${frightonId} not found` });
+      res.status(404).json({ error: `Student with ID ${studentNumber} not found` });
       return;
     }
 

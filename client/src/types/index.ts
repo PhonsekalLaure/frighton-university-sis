@@ -5,7 +5,8 @@ export type HoldType = 'library_debt' | 'academic_probation' | 'financial_delinq
 
 export interface Profile {
   id: string;
-  frighton_id: string;
+  student_number: string;
+  frighton_id?: string;
   first_name: string;
   last_name: string;
   email: string;

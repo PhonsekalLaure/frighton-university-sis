@@ -226,7 +226,7 @@ describe('SIS Backend Foundation & Security Verification', () => {
   test('10. Dashboard aggregates profile, academic assignments, holds, and billing without enrollment data', async () => {
     const results: Record<string, unknown> = {
       profiles: {
-        id: 'student-1', frighton_id: 'STU-2026-0001', first_name: 'Jane', last_name: 'Student',
+        id: 'student-1', student_number: 'STU-2026-0001', frighton_id: 'STU-2026-0001', first_name: 'Jane', last_name: 'Student',
         email: 'jane@frighton.edu', department: 'Computing', program: 'BSCS', year_level: 2,
         academic_status: 'active', avatar_url: null,
       },
