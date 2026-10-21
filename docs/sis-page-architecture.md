@@ -1,4 +1,4 @@
-# Frighton University SIS — Page Architecture & Blueprint
+# Frighton University SIS - Page Architecture & Blueprint
 
 ## Scope and delivery status
 
@@ -7,8 +7,10 @@ Frighton SIS is a student self-service portal with a distinct administrator surf
 - Only active `student` and `admin` directory accounts may sign in.
 - The implemented dashboard endpoint is student-only: `GET /api/v1/dashboard/me`.
 - The dashboard reads academic assignments from `academic_records`; this SIS does not model enrollment, registration, waitlists, section capacity, instructor accounts, or registrar accounts.
-- The LMS integration is server-to-server and manages library-debt holds. Never place its API key in browser code.
-- Dashboard, Schedule, Grades, and Billing have student-only read APIs. Their pages remain frontend work; Holds and the separate Admin surface remain roadmap items.
+- The current React client is an architecture hub. The first portal increment is a protected student shell with Library and Holds pages.
+- SIS owns student identity, borrowing eligibility, and university holds. The Library Management System (LMS) owns its catalog, reservations, loans, due dates, and fines.
+- The student browser calls SIS APIs only. SIS and LMS communicate server-to-server with separate credentials; LMS API keys and service-role capabilities never enter browser code.
+- Dashboard, Schedule, Grades, and Billing have student-only read APIs. Their pages remain frontend work. Holds and Library are planned student views; the administrator surface remains separate.
 
 ## Route map
 
@@ -19,6 +21,7 @@ graph TD
     Shell --> Schedule["Schedule /schedule"]
     Shell --> Grades["Grades /grades"]
     Shell --> Billing["Billing /billing"]
+    Shell --> Library["Library /library"]
     Shell --> Holds["Holds /holds"]
     Auth --> Admin["Separate Administrator Console /admin"]
 ```
@@ -36,21 +39,61 @@ graph TD
   - Unresolved student holds.
   - Current-term classes scheduled on the current `Asia/Manila` weekday.
 
-The dashboard must render assignment language such as “current academic credits”; it must not imply that it can register a student for a class.
+The dashboard must render assignment language such as "current academic credits"; it must not imply that it can register a student for a class.
 
 ## Roadmap views
 
-| Route | Audience | Backing tables | Notes |
+| Route | Audience | Backing system/tables | Notes |
 | --- | --- | --- | --- |
 | `/schedule` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | `GET /api/v1/schedule/me` is available; weekly and list views remain future UI work. |
 | `/grades` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | `GET /api/v1/grades/me` returns the static transcript and GPA; presentation remains future UI work. |
 | `/billing` | Student | `student_accounts`, `student_payments`, `academic_terms` | `GET /api/v1/billing/me` returns the current balance and historical cashier-posted statements. It is not an online payment portal. |
-| `/holds` | Student | `student_holds` | Library holds use `hold_type = 'library_debt'`. |
-| `/admin` | Admin | Portal tables above | Separate from the student dashboard; it is not implemented by the student route. |
+| `/library` | Student | LMS `books`, `reservations`, `borrow_records` | Planned LMS-backed catalog, reservation, loan, due-date, and read-only fine view. |
+| `/holds` | Student | SIS `student_holds` | Planned account-restrictions view. Library restrictions use `hold_type = 'library_debt'`. |
+| `/admin` | Admin | SIS portal tables | Separate from the student dashboard; it is not implemented by a student route. |
 
 ## UI shell
 
-The future student shell should expose Dashboard, Schedule, Grades, Billing, and Holds. Show the active term and active-hold indicator. Use the `studentNumber` returned by the API; do not use the retired `frighton_id` name. Administrator navigation belongs to the separate admin surface.
+The protected student shell should expose Library and Holds in its first increment, with the other student destinations retained as future navigation targets or placeholders. Show the active term and active-hold indicator. Use the `studentNumber` returned by the API; do not use the retired `frighton_id` name. Administrator navigation belongs to the separate admin surface.
+
+## Library view intent
+
+The Library page is a student self-service view of LMS-owned data. It is not a librarian console and it does not give the browser direct database or LMS access.
+
+- Show a searchable catalog with availability and a Reserve action for available copies.
+- A v1 reservation is a Main Library pickup reservation, not a waitlist. An active reservation is ready for pickup, expires after three days, and can be cancelled by the student before fulfilment.
+- Show the student's active reservations, including book details, status, reservation date, Main Library pickup location, and expiry date.
+- Show current loans with Manila-local due dates, overdue days, and read-only unpaid fines.
+- Do not add renewals, loan history, student-entered payments, card/wallet forms, or librarian/staff workflows in v1.
+- The LMS must allocate an available copy atomically, expire stale reservations, fulfil a reservation into a loan, and prevent duplicate active reservations for the same student and book.
+
+## Holds view intent
+
+The Holds page is a read-only account-restrictions view, not a library-loan or reservation page.
+
+- Show active restrictions first, followed by resolved-hold history.
+- For each hold, show its type, reason, source, placement date, status, and clearance guidance.
+- A `library_debt` hold is an SIS restriction caused by library debt; it is not itself a book reservation or a loan record.
+- Cross-link library-related guidance to `/library` and financial-hold guidance to `/billing` where appropriate.
+- Students cannot create, edit, pay, or resolve holds from this page. Authorized SIS processes and the LMS manage hold state.
+
+## Planned student APIs and LMS integration
+
+The following SIS APIs are planned and must require `requireAuth` plus `requireStudent`. They derive the student from the authenticated SIS session; the browser must never submit a student identifier or an LMS credential.
+
+| Planned SIS API | Purpose |
+| --- | --- |
+| `GET /api/v1/library/books` | Return LMS-backed catalog search and availability data. |
+| `GET /api/v1/library/me` | Return the signed-in student's active reservations, current loans, due dates, and read-only unpaid fines. |
+| `POST /api/v1/library/reservations` | Request a reservation for an available LMS book using a server-derived student identity. |
+| `DELETE /api/v1/library/reservations/:reservationId` | Cancel the signed-in student's eligible active reservation. |
+| `GET /api/v1/holds/me` | Return the signed-in student's active holds and resolved-hold history. |
+
+SIS checks active status and unresolved SIS holds before forwarding a reservation request to LMS. LMS remains authoritative for availability, reservation state, loans, due dates, and fine amounts. If LMS is unavailable, SIS must not create or change a reservation locally.
+
+LMS continues to call the protected SIS integration endpoints to check a student's borrowing eligibility and synchronize library debt holds. Use `studentNumber` consistently in new contracts. The legacy `frighton_id` wording in `docs/lms-integration-spec.md` requires a compatibility/documentation update before the new contract is released.
+
+The LMS automatically creates or updates an idempotent SIS `library_debt` hold when a loan is 14 days overdue or an unpaid replacement charge exists. It resolves that hold only when all qualifying library debt has been cleared.
 
 ## Billing view intent
 
@@ -64,8 +107,13 @@ The Billing page is a read-only statement center, not a payment gateway. The fro
 
 ## Implementation order
 
-1. Add the student authentication screen and a protected app shell.
-2. Build `/dashboard` against the existing dashboard endpoint.
-3. Build Schedule, Grades, and Billing views against their existing read APIs; add the Holds read API/view.
-4. Build the separate admin API and console with explicit admin authorization.
-5. Connect the LMS only from server-side code using `X-LMS-API-KEY`.
+1. Add the student authentication screen and protected student shell.
+2. Define and implement the server-to-server LMS API/client contract with separate directional credentials.
+3. Build `/library`: catalog, available-copy pickup reservation, active reservations, current loans, and read-only unpaid fines.
+4. Add the Holds read API and `/holds` view, including active restrictions and resolved history.
+5. Build Dashboard, Schedule, Grades, and Billing views against their existing student-only APIs.
+6. Build the separate admin API and console with explicit admin authorization.
+
+## Explicit boundaries
+
+This baseline excludes academic enrollment and registration, course waitlists, librarian UI, loan renewals, online payment processing, and direct browser access to LMS credentials, service-role keys, or LMS-owned write operations.
