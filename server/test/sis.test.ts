@@ -4,6 +4,7 @@ import http from 'node:http';
 import { createApp } from '../src/app.js';
 import { findUser, AuthError } from '../src/services/authService.js';
 import { DashboardClient, getDashboard } from '../src/services/dashboardService.js';
+import { ScheduleClient, getSchedule } from '../src/services/scheduleService.js';
 import { readAccessToken, readCookie, setAuthCookies, clearAuthCookies } from '../src/utils/authCookies.js';
 import type { Request, Response } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -240,7 +241,75 @@ describe('SIS Backend Foundation & Security Verification', () => {
     assert.equal(data.error, 'Please sign in to access your account.');
   });
 
-  test('10. Dashboard aggregates profile, academic assignments, holds, and billing without enrollment data', async () => {
+  test('10. Schedule requires an authenticated SIS session', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/schedule/me`);
+    assert.equal(res.status, 401);
+    const data = await res.json();
+    assert.equal(data.error, 'Please sign in to access your account.');
+  });
+
+  test('11. Schedule returns only current assignments in the active term', async () => {
+    const results: Record<string, unknown> = {
+      profiles: { id: 'student-1' },
+      academic_terms: { id: 'term-1', code: '2026-1', name: 'First Semester 2026', start_date: '2026-08-01', end_date: '2026-12-20' },
+      academic_records: [
+        {
+          id: 'record-2',
+          section: {
+            term_id: 'term-1', section_number: '01', schedule: 'Tue/Thu 11:00 - 12:30 PM', room: 'Lab 204',
+            instructor_name: 'Dr. Turing', instructor_email: 'turing@frighton.edu',
+            course: { course_code: 'CS-220', title: 'Algorithms', credits: 3 },
+          },
+        },
+        {
+          id: 'record-1',
+          section: {
+            term_id: 'term-1', section_number: '02', schedule: 'Mon/Wed 09:00 - 10:30 AM', room: 'Hall 101',
+            instructor_name: 'Dr. Lovelace', instructor_email: 'ada@frighton.edu',
+            course: { course_code: 'CS-101', title: 'Programming', credits: '4' },
+          },
+        },
+        { id: 'incomplete-record', section: null },
+      ],
+    };
+    const mockClient: ScheduleClient = {
+      from: (table: string) => {
+        const result = results[table] ?? null;
+        const builder: any = {
+          select: () => builder,
+          eq: () => builder,
+          maybeSingle: async () => ({ data: result, error: null }),
+          then: (onfulfilled: any, onrejected: any) => Promise.resolve({ data: result, error: null }).then(onfulfilled, onrejected),
+        };
+        return builder;
+      },
+    };
+
+    const schedule = await getSchedule('student-1', mockClient);
+    assert.equal(schedule.currentTerm?.code, '2026-1');
+    assert.equal(schedule.classes.length, 2);
+    assert.equal(schedule.classes[0].courseCode, 'CS-101');
+    assert.equal(schedule.classes[0].credits, 4);
+    assert.deepEqual(schedule.classes[0].instructor, { name: 'Dr. Lovelace', email: 'ada@frighton.edu' });
+    assert.equal(schedule.classes[1].courseCode, 'CS-220');
+  });
+
+  test('12. Schedule has no classes when there is no active term', async () => {
+    const mockClient: ScheduleClient = {
+      from: (table: string) => {
+        const result = table === 'profiles' ? { id: 'student-1' } : null;
+        const builder: any = {
+          select: () => builder,
+          eq: () => builder,
+          maybeSingle: async () => ({ data: result, error: null }),
+        };
+        return builder;
+      },
+    };
+    assert.deepEqual(await getSchedule('student-1', mockClient), { currentTerm: null, classes: [] });
+  });
+
+  test('13. Dashboard aggregates profile, academic assignments, holds, and billing without enrollment data', async () => {
     const results: Record<string, unknown> = {
       profiles: {
         id: 'student-1', student_number: 'STU-2026-0001', first_name: 'Jane', last_name: 'Student',
