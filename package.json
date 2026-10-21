@@ -13,7 +13,12 @@
     "build": "npm run build -w client && npm run build -w server",
     "build:client": "npm run build -w client",
     "build:server": "npm run build -w server",
-    "test:server": "npm run test -w server"
+    "test:server": "npm run test -w server",
+    "seed:students": "npm run seed:students -w server",
+    "seed": "npm run seed -w server",
+    "setup:sis": "npm run setup:sis -w server --",
+    "reset:sis": "npm run reset:sis -w server --",
+    "reset:students": "npm run reset:sis -w server --"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

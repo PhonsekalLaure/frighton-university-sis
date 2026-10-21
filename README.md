@@ -43,6 +43,34 @@ Frighton University SIS/
 
 ## 🚀 Quick Start
 
+### Seed development data
+Seed data lives in `server/src/seed-data`, with one typed array per entity. Set
+`SISLMS_SUPABASE_PROJECT_REF` in `server/.env` to the project ref shown in the
+URL for **sislms331-sudo's Project**, then run:
+
+```bash
+npm run seed
+```
+
+The command refuses to run when the configured `SUPABASE_URL` does not match
+that ref, provisions ten student Auth accounts, and upserts the related SIS data.
+
+To clear SIS-managed records before a fresh seed, run:
+
+```bash
+npm run reset:sis -- --confirm
+```
+
+This permanently clears academic records, holds, payments, accounts, profiles,
+sections, courses, and terms. It preserves the LMS/shared `books`,
+`borrow_records`, `reservations`, `users`, and Auth user accounts.
+
+To perform the reset and seed in one command, run:
+
+```bash
+npm run setup:sis -- --confirm
+```
+
 ### 1. Install Dependencies
 Run from the root directory to install packages across workspaces:
 ```bash
