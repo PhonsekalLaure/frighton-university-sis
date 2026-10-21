@@ -1,12 +1,10 @@
-export type UserRole = 'student' | 'instructor' | 'registrar' | 'admin';
+export type UserRole = 'student' | 'admin';
 export type AcademicStatus = 'active' | 'probation' | 'suspended' | 'graduated' | 'withdrawn';
-export type EnrollmentStatus = 'enrolled' | 'dropped' | 'waitlisted' | 'completed';
 export type HoldType = 'library_debt' | 'academic_probation' | 'financial_delinquency' | 'disciplinary';
 
 export interface Profile {
   id: string;
   student_number: string;
-  frighton_id?: string;
   first_name: string;
   last_name: string;
   email: string;
@@ -40,11 +38,11 @@ export interface CourseSection {
   id: string;
   course_id: string;
   term_id: string;
-  instructor_id?: string;
+  instructor_name?: string | null;
+  instructor_email?: string | null;
   section_number: string;
-  schedule: string;
-  room: string;
-  capacity: number;
+  schedule?: string | null;
+  room?: string | null;
   course?: Course;
 }
 

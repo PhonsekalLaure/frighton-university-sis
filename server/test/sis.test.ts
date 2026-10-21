@@ -193,7 +193,14 @@ describe('SIS Backend Foundation & Security Verification', () => {
       (err: any) => err instanceof AuthError && err.status === 403 && err.message.includes('restricted to active students and administrators')
     );
 
-    // Scenario E: Deactivated account -> Rejected (403)
+    // Scenario E: The live shared directory's librarian role -> Rejected (403)
+    mockAccount.role = 'Librarian';
+    await assert.rejects(
+      async () => await findUser(mockUser, mockAdminClient),
+      (err: any) => err instanceof AuthError && err.status === 403 && err.message.includes('restricted to active students and administrators')
+    );
+
+    // Scenario F: Deactivated account -> Rejected (403)
     mockAccount = {
       users_id: 'user-4',
       first_name: 'Deactivated',
@@ -208,11 +215,21 @@ describe('SIS Backend Foundation & Security Verification', () => {
       (err: any) => err instanceof AuthError && err.status === 403 && err.message.includes('deactivated')
     );
 
-    // Scenario F: No matching university account -> Rejected (403)
+    // Scenario G: No matching university account -> Rejected (403)
     mockAccount = null;
     await assert.rejects(
       async () => await findUser(mockUser, mockAdminClient),
       (err: any) => err instanceof AuthError && err.status === 403
+    );
+
+    // Scenario H: An unverified Auth account cannot be authorized by a directory role.
+    mockAccount = {
+      users_id: 'user-5', first_name: 'Unverified', middle_name: null, last_name: 'Student',
+      email: 'user@frighton.edu', role: 'Students', is_active: true,
+    };
+    await assert.rejects(
+      async () => await findUser({ ...mockUser, email_confirmed_at: null }, mockAdminClient),
+      (err: any) => err instanceof AuthError && err.status === 403 && err.message.includes('verify your university email')
     );
   });
 
@@ -226,7 +243,7 @@ describe('SIS Backend Foundation & Security Verification', () => {
   test('10. Dashboard aggregates profile, academic assignments, holds, and billing without enrollment data', async () => {
     const results: Record<string, unknown> = {
       profiles: {
-        id: 'student-1', student_number: 'STU-2026-0001', frighton_id: 'STU-2026-0001', first_name: 'Jane', last_name: 'Student',
+        id: 'student-1', student_number: 'STU-2026-0001', first_name: 'Jane', last_name: 'Student',
         email: 'jane@frighton.edu', department: 'Computing', program: 'BSCS', year_level: 2,
         academic_status: 'active', avatar_url: null,
       },
@@ -270,6 +287,8 @@ describe('SIS Backend Foundation & Security Verification', () => {
 
     const dashboard = await getDashboard('student-1', mockClient, new Date('2026-10-20T12:00:00.000Z'));
     assert.equal(dashboard.profile.fullName, 'Jane Student');
+    assert.equal(dashboard.profile.studentNumber, 'STU-2026-0001');
+    assert.equal('frightonId' in dashboard.profile, false);
     assert.equal(dashboard.metrics.currentAcademicCredits, 3);
     assert.equal(dashboard.metrics.cumulativeGpa, 4);
     assert.equal(dashboard.metrics.creditsEarned, 4);

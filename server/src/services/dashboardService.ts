@@ -160,8 +160,7 @@ export async function getDashboard(
   return {
     profile: {
       id: profile.id,
-      studentNumber: profile.student_number ?? profile.frighton_id,
-      frightonId: profile.student_number ?? profile.frighton_id,
+      studentNumber: profile.student_number,
       fullName: [profile.first_name, profile.last_name].filter(Boolean).join(' '),
       email: profile.email,
       department: profile.department,

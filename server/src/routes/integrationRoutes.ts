@@ -23,12 +23,12 @@ integrationRouter.use(requireIntegrationApiKey);
 
 /**
  * GET /api/v1/integration/students/:studentNumber/status
- * Used by the Library Management System to check if a student or faculty member is actively enrolled,
- * has any blocking holds, or is in good academic standing before borrowing books.
+ * Used by the Library Management System to check whether a student has any
+ * blocking holds or is in good academic standing before borrowing books.
  */
-integrationRouter.get(['/students/:studentNumber/status', '/students/:frightonId/status'], async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+integrationRouter.get('/students/:studentNumber/status', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const studentNumber = req.params.studentNumber || req.params.frightonId;
+    const { studentNumber } = req.params;
     const supabaseAdmin = getSupabaseAdmin();
 
     const { data: profile, error } = await supabaseAdmin
@@ -53,7 +53,6 @@ integrationRouter.get(['/students/:studentNumber/status', '/students/:frightonId
 
     res.json({
       studentNumber: profile.student_number,
-      frightonId: profile.student_number,
       name: `${profile.first_name} ${profile.last_name}`,
       email: profile.email,
       role: profile.role,
@@ -70,15 +69,15 @@ integrationRouter.get(['/students/:studentNumber/status', '/students/:frightonId
 /**
  * POST /api/v1/integration/holds
  * Allows the Library Management System to automatically place a hold on a student's SIS account
- * (e.g. for overdue materials, unpaid replacement fines), which blocks course registration/graduation.
+ * (e.g. for overdue materials or unpaid replacement fines).
  */
 integrationRouter.post('/holds', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const studentNumber = req.body.studentNumber || req.body.frightonId;
+    const { studentNumber } = req.body;
     const { reason, amount } = req.body;
 
     if (!studentNumber || !reason) {
-      res.status(400).json({ error: 'studentNumber (or frightonId) and reason are required' });
+      res.status(400).json({ error: 'studentNumber and reason are required' });
       return;
     }
 

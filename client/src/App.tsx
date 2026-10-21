@@ -6,7 +6,6 @@ import {
   Server, 
   ShieldCheck, 
   Activity, 
-  ArrowRight,
   Terminal,
   Library,
   GraduationCap
@@ -22,9 +21,6 @@ export function App() {
   const [activeTab, setActiveTab] = useState<'overview' | 'schema' | 'lms' | 'setup'>('overview');
   const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null);
   const [backendLoading, setBackendLoading] = useState(true);
-  const [testId, setTestId] = useState('STU-2026-0001');
-  const [integrationResult, setIntegrationResult] = useState<string | null>(null);
-  const [testingEndpoint, setTestingEndpoint] = useState(false);
 
   useEffect(() => {
     fetch('/api/health')
@@ -41,24 +37,6 @@ export function App() {
         setBackendLoading(false);
       });
   }, []);
-
-  const handleTestLmsCheck = async () => {
-    setTestingEndpoint(true);
-    setIntegrationResult(null);
-    try {
-      const response = await fetch(`/api/v1/integration/students/${testId}/status`, {
-        headers: {
-          'x-lms-api-key': 'frighton-lms-sis-shared-secret-key-change-in-prod'
-        }
-      });
-      const data = await response.json();
-      setIntegrationResult(JSON.stringify(data, null, 2));
-    } catch (err: unknown) {
-      setIntegrationResult(JSON.stringify({ error: err instanceof Error ? err.message : 'Request failed' }, null, 2));
-    } finally {
-      setTestingEndpoint(false);
-    }
-  };
 
   return (
     <div className="app-container">
@@ -126,7 +104,7 @@ export function App() {
           <div className="callout">
             <p>
               <strong>Architecture Status:</strong> Monorepo scaffolded with React (Vite) + Express (TypeScript). 
-              Prepared for Supabase PostgreSQL database connection, Row Level Security, and bidirectional LMS integration.
+              Connected to Supabase PostgreSQL with Row Level Security and a server-to-server LMS integration boundary.
             </p>
           </div>
 
@@ -138,6 +116,7 @@ export function App() {
               </p>
               <div className="code-block">
                 GET /api/health<br />
+                GET /api/v1/dashboard/me<br />
                 GET /api/v1/integration/students/:id/status<br />
                 POST /api/v1/integration/holds
               </div>
@@ -146,12 +125,12 @@ export function App() {
             <div className="card">
               <h2 className="card-title"><Database size={20} color="#38bdf8" /> Supabase & PostgreSQL</h2>
               <p className="card-description">
-                Relational schema designed for academic terms, courses, sections, enrollments, and student holds with strict RLS.
+                Relational schema for academic terms, courses, section assignments, billing, and student holds with strict RLS.
               </p>
               <div className="code-block">
-                supabase/migrations/001_initial_schema.sql<br />
-                supabase/migrations/002_rls_policies.sql<br />
-                supabase/seed.sql
+                supabase/migrations/20261020154411_sis_student_admin_portal_schema.sql<br />
+                supabase/migrations/20261020155029_sis_link_profiles_to_shared_users.sql<br />
+                supabase/migrations/20261021140908_rename_frighton_id_to_student_number.sql
               </div>
             </div>
 
@@ -174,9 +153,9 @@ export function App() {
       {activeTab === 'schema' && (
         <section>
           <div className="card">
-            <h2 className="card-title"><Database size={20} color="#8b5cf6" /> Ready-to-Apply Database Tables</h2>
+            <h2 className="card-title"><Database size={20} color="#8b5cf6" /> SIS Database Tables</h2>
             <p className="card-description">
-              These tables are fully scripted in <code>supabase/migrations/001_initial_schema.sql</code> and protected by RLS in <code>002_rls_policies.sql</code>.
+              These tables are applied to the SIS Supabase project and protected by RLS.
             </p>
 
             <table className="data-table">
@@ -191,7 +170,7 @@ export function App() {
                 <tr>
                   <td><code>profiles</code></td>
                   <td>id, student_number, first_name, last_name, role, academic_status</td>
-                  <td>Users linked 1:1 with Supabase Auth (students, instructors, admins)</td>
+                  <td>SIS academic profiles linked to the shared university user directory (students and admins)</td>
                 </tr>
                 <tr>
                   <td><code>academic_terms</code></td>
@@ -205,18 +184,18 @@ export function App() {
                 </tr>
                 <tr>
                   <td><code>course_sections</code></td>
-                  <td>id, course_id, term_id, instructor_id, schedule, room, capacity</td>
-                  <td>Offered classes in specific terms with instructor assignments</td>
+                  <td>id, course_id, term_id, instructor_name, instructor_email, schedule, room</td>
+                  <td>Offered course sections and their published timetable</td>
                 </tr>
                 <tr>
-                  <td><code>enrollments</code></td>
-                  <td>id, student_id, section_id, status, grade</td>
-                  <td>Student class registration and grade tracking</td>
+                  <td><code>academic_records</code></td>
+                  <td>id, student_id, section_id, grade, is_current</td>
+                  <td>Student transcript and current schedule assignments</td>
                 </tr>
                 <tr>
                   <td><code>student_holds</code></td>
                   <td>id, student_id, hold_type, reason, placed_by_system, resolved_at</td>
-                  <td>Holds blocking enrollment or graduation (e.g., library fines, debt)</td>
+                  <td>Holds and clearance restrictions (e.g., library fines, debt)</td>
                 </tr>
               </tbody>
             </table>
@@ -230,44 +209,8 @@ export function App() {
           <div className="card">
             <h2 className="card-title"><Library size={20} color="#38bdf8" /> Library Management System (LMS) Bridge Tester</h2>
             <p className="card-description">
-              Test how the Library Management System interacts with the SIS API to query patron eligibility or place/resolve borrowing holds.
+              The LMS calls <code>GET /api/v1/integration/students/:studentNumber/status</code> and the hold endpoints from its server using <code>X-LMS-API-KEY</code>. The key is deliberately never available to browser code.
             </p>
-
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <input 
-                type="text" 
-                value={testId} 
-                onChange={(e) => setTestId(e.target.value)}
-                placeholder="Enter Student Number (e.g. STU-2026-0001)"
-                style={{
-                  background: '#05070a',
-                  border: '1px solid var(--border-color)',
-                  color: '#fff',
-                  padding: '0.75rem 1rem',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '0.9rem',
-                  flex: 1
-                }}
-              />
-              <button 
-                className="action-btn"
-                onClick={handleTestLmsCheck}
-                disabled={testingEndpoint}
-              >
-                {testingEndpoint ? 'Querying...' : 'Query Patron Status'} <ArrowRight size={16} />
-              </button>
-            </div>
-
-            {integrationResult && (
-              <div>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                  Response from <code>GET /api/v1/integration/students/{testId}/status</code>:
-                </p>
-                <pre className="code-block" style={{ maxHeight: '250px' }}>
-                  {integrationResult}
-                </pre>
-              </div>
-            )}
           </div>
         </section>
       )}
@@ -278,22 +221,16 @@ export function App() {
           <div className="card">
             <h2 className="card-title"><Terminal size={20} color="#10b981" /> Connecting Your Supabase Project</h2>
             <p className="card-description">
-              When you are ready to create your Supabase project, follow these simple steps to link it:
+              The SIS project is already linked. Configure the local environment with the project credentials before running the API:
             </p>
 
             <ol style={{ paddingLeft: '1.25rem', color: 'var(--text-muted)', lineHeight: '1.8' }}>
               <li>
-                Visit <strong style={{ color: '#fff' }}>supabase.com</strong> and create a new project called <code>Frighton University SIS</code>.
-              </li>
-              <li>
-                In the Supabase Dashboard, open the <strong style={{ color: '#fff' }}>SQL Editor</strong>.
-              </li>
-              <li>
-                Copy and run the contents of:
+                Apply the ordered migrations in <code>supabase/migrations/</code> to an empty development project, or use the existing SIS project.
                 <ul style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
-                  <li><code>supabase/migrations/001_initial_schema.sql</code></li>
-                  <li><code>supabase/migrations/002_rls_policies.sql</code></li>
-                  <li><code>supabase/seed.sql</code></li>
+                  <li><code>20261020154411_sis_student_admin_portal_schema.sql</code></li>
+                  <li><code>20261020155029_sis_link_profiles_to_shared_users.sql</code></li>
+                  <li><code>20261021140908_rename_frighton_id_to_student_number.sql</code></li>
                 </ul>
               </li>
               <li>
