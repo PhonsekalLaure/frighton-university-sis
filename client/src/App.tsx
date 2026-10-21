@@ -1,253 +1,161 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from 'lucide-react';
 import './App.css';
-import { isSupabaseConfigured } from './config/supabase';
-import { 
-  Database, 
-  Server, 
-  ShieldCheck, 
-  Activity, 
-  Terminal,
-  Library,
-  GraduationCap
-} from 'lucide-react';
 
-interface BackendHealth {
-  status: string;
-  service: string;
-  timestamp: string;
+interface SignedInUser {
+  fullName: string;
+  email: string;
+  role: 'student' | 'admin';
+}
+
+interface AuthResponse {
+  user?: SignedInUser;
+  error?: string;
 }
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'schema' | 'lms' | 'setup'>('overview');
-  const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null);
-  const [backendLoading, setBackendLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [user, setUser] = useState<SignedInUser | null>(null);
 
   useEffect(() => {
-    fetch('/api/health')
-      .then((res) => {
-        if (!res.ok) throw new Error('Backend offline');
-        return res.json();
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data: AuthResponse = await response.json();
+        if (data.user) setUser(data.user);
       })
-      .then((data: BackendHealth) => {
-        setBackendHealth(data);
-        setBackendLoading(false);
-      })
-      .catch(() => {
-        setBackendHealth(null);
-        setBackendLoading(false);
-      });
+      .catch(() => undefined);
   }, []);
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, password, remember }),
+      });
+      const data: AuthResponse = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? 'Unable to sign in. Please try again.');
+      }
+      setUser(data.user ?? null);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Unable to sign in. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
-    <div className="app-container">
-      {/* Header */}
-      <header className="app-header">
-        <div className="brand-section">
-          <div className="brand-crest">
-            <GraduationCap size={28} color="#fff" />
-          </div>
-          <div>
-            <h1 className="brand-title">Frighton University SIS</h1>
-            <p className="brand-subtitle">Student Information System & Academic Gateway</p>
-          </div>
-        </div>
+    <main className="login-page">
+      <div className="ambient-glow ambient-glow-left" />
+      <div className="ambient-glow ambient-glow-right" />
 
-        <div className="status-badges">
-          <div className="badge">
-            <span className={`badge-dot ${backendHealth ? 'online' : 'pending'}`}></span>
-            <span>API Server: {backendLoading ? 'Checking...' : backendHealth ? 'Connected' : 'Offline'}</span>
+      <section className="login-shell" aria-label="Frighton University student portal">
+        <div className="brand-lockup">
+          <div className="university-mark" aria-hidden="true">
+            <span>F</span>
+            <small>1912</small>
           </div>
-
-          <div className="badge">
-            <span className={`badge-dot ${isSupabaseConfigured ? 'online' : 'pending'}`}></span>
-            <span>Supabase: {isSupabaseConfigured ? 'Configured' : 'Credentials Needed'}</span>
-          </div>
-
-          <div className="badge">
-            <span className="badge-dot integration"></span>
-            <span>LMS Bridge: Active</span>
+          <div className="brand-copy">
+            <p className="eyebrow">FRIGHTON UNIVERSITY</p>
+            <p className="brand-name">Student Information System</p>
           </div>
         </div>
-      </header>
 
-      {/* Tabs */}
-      <nav className="tabs-nav">
-        <button 
-          className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
-          onClick={() => setActiveTab('overview')}
-        >
-          <Activity size={18} /> Architecture Overview
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'schema' ? 'active' : ''}`}
-          onClick={() => setActiveTab('schema')}
-        >
-          <Database size={18} /> Database & Schemas
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'lms' ? 'active' : ''}`}
-          onClick={() => setActiveTab('lms')}
-        >
-          <Library size={18} /> Library (LMS) Integration Hub
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'setup' ? 'active' : ''}`}
-          onClick={() => setActiveTab('setup')}
-        >
-          <ShieldCheck size={18} /> Supabase Setup Guide
-        </button>
-      </nav>
-
-      {/* Tab: Overview */}
-      {activeTab === 'overview' && (
-        <section>
-          <div className="callout">
-            <p>
-              <strong>Architecture Status:</strong> Monorepo scaffolded with React (Vite) + Express (TypeScript). 
-              Connected to Supabase PostgreSQL with Row Level Security and a server-to-server LMS integration boundary.
-            </p>
-          </div>
-
-          <div className="cards-grid">
-            <div className="card">
-              <h2 className="card-title"><Server size={20} color="#8b5cf6" /> Node.js & Express API</h2>
-              <p className="card-description">
-                TypeScript REST backend running on port 5000 with JWT middleware, role validation, and CORS protection.
-              </p>
-              <div className="code-block">
-                GET /api/health<br />
-                GET /api/v1/dashboard/me<br />
-                GET /api/v1/integration/students/:id/status<br />
-                POST /api/v1/integration/holds
-              </div>
+        <div className="login-card">
+          {user ? (
+            <div className="signed-in-state">
+              <div className="success-icon"><ShieldCheck size={28} /></div>
+              <p className="eyebrow">AUTHENTICATED</p>
+              <h1>Welcome, {user.fullName || 'Frighton student'}.</h1>
+              <p className="supporting-copy">You are signed in as a {user.role}. Your SIS session is active.</p>
+              <button className="submit-button" type="button" onClick={() => setUser(null)}>
+                Continue to SIS <ArrowRight size={17} />
+              </button>
             </div>
-
-            <div className="card">
-              <h2 className="card-title"><Database size={20} color="#38bdf8" /> Supabase & PostgreSQL</h2>
-              <p className="card-description">
-                Relational schema for academic terms, courses, section assignments, billing, and student holds with strict RLS.
-              </p>
-              <div className="code-block">
-                supabase/migrations/20261020154411_sis_student_admin_portal_schema.sql<br />
-                supabase/migrations/20261020155029_sis_link_profiles_to_shared_users.sql<br />
-                supabase/migrations/20261021140908_rename_frighton_id_to_student_number.sql
+          ) : (
+            <>
+              <div className="card-heading">
+                <p className="eyebrow">STUDENT PORTAL</p>
+                <h1>Sign in to your account</h1>
+                <p className="supporting-copy">Access your classes, academic records, and university services.</p>
               </div>
-            </div>
 
-            <div className="card">
-              <h2 className="card-title"><Library size={20} color="#10b981" /> Library System Bridge</h2>
-              <p className="card-description">
-                Pre-configured contract ready to integrate with Frighton University's upcoming Library Management System.
-              </p>
-              <div className="code-block">
-                docs/lms-integration-spec.md<br />
-                Header: X-LMS-API-KEY<br />
-                Hold type: library_debt
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
+              <form onSubmit={handleSubmit} noValidate>
+                <label htmlFor="email">University email</label>
+                <div className="input-wrap">
+                  <Mail size={18} aria-hidden="true" />
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="name@frighton.edu"
+                    autoComplete="email"
+                    required
+                  />
+                </div>
 
-      {/* Tab: Schema */}
-      {activeTab === 'schema' && (
-        <section>
-          <div className="card">
-            <h2 className="card-title"><Database size={20} color="#8b5cf6" /> SIS Database Tables</h2>
-            <p className="card-description">
-              These tables are applied to the SIS Supabase project and protected by RLS.
-            </p>
+                <div className="label-row">
+                  <label htmlFor="password">Password</label>
+                  <a href="mailto:helpdesk@frighton.edu?subject=SIS%20password%20help">Need help?</a>
+                </div>
+                <div className="input-wrap">
+                  <LockKeyhole size={18} aria-hidden="true" />
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                    required
+                  />
+                  <button
+                    className="icon-button"
+                    type="button"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
 
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Table</th>
-                  <th>Key Columns</th>
-                  <th>Role / Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>profiles</code></td>
-                  <td>id, student_number, first_name, last_name, role, academic_status</td>
-                  <td>SIS academic profiles linked to the shared university user directory (students and admins)</td>
-                </tr>
-                <tr>
-                  <td><code>academic_terms</code></td>
-                  <td>id, code, name, start_date, end_date, is_active</td>
-                  <td>Semesters and terms (e.g. Fall 2026, Spring 2027)</td>
-                </tr>
-                <tr>
-                  <td><code>courses</code></td>
-                  <td>id, course_code, title, credits, department</td>
-                  <td>Master academic course catalog</td>
-                </tr>
-                <tr>
-                  <td><code>course_sections</code></td>
-                  <td>id, course_id, term_id, instructor_name, instructor_email, schedule, room</td>
-                  <td>Offered course sections and their published timetable</td>
-                </tr>
-                <tr>
-                  <td><code>academic_records</code></td>
-                  <td>id, student_id, section_id, grade, is_current</td>
-                  <td>Student transcript and current schedule assignments</td>
-                </tr>
-                <tr>
-                  <td><code>student_holds</code></td>
-                  <td>id, student_id, hold_type, reason, placed_by_system, resolved_at</td>
-                  <td>Holds and clearance restrictions (e.g., library fines, debt)</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
+                <label className="remember-me">
+                  <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+                  <span className="custom-checkbox" aria-hidden="true" />
+                  Keep me signed in
+                </label>
 
-      {/* Tab: LMS Integration */}
-      {activeTab === 'lms' && (
-        <section>
-          <div className="card">
-            <h2 className="card-title"><Library size={20} color="#38bdf8" /> Library Management System (LMS) Bridge Tester</h2>
-            <p className="card-description">
-              The LMS calls <code>GET /api/v1/integration/students/:studentNumber/status</code> and the hold endpoints from its server using <code>X-LMS-API-KEY</code>. The key is deliberately never available to browser code.
-            </p>
-          </div>
-        </section>
-      )}
+                {error && <p className="error-message" role="alert">{error}</p>}
 
-      {/* Tab: Setup Guide */}
-      {activeTab === 'setup' && (
-        <section>
-          <div className="card">
-            <h2 className="card-title"><Terminal size={20} color="#10b981" /> Connecting Your Supabase Project</h2>
-            <p className="card-description">
-              The SIS project is already linked. Configure the local environment with the project credentials before running the API:
-            </p>
+                <button className="submit-button" type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Signing in…' : 'Sign in'}
+                  {!isSubmitting && <ArrowRight size={17} />}
+                </button>
+              </form>
 
-            <ol style={{ paddingLeft: '1.25rem', color: 'var(--text-muted)', lineHeight: '1.8' }}>
-              <li>
-                Apply the ordered migrations in <code>supabase/migrations/</code> to an empty development project, or use the existing SIS project.
-                <ul style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
-                  <li><code>20261020154411_sis_student_admin_portal_schema.sql</code></li>
-                  <li><code>20261020155029_sis_link_profiles_to_shared_users.sql</code></li>
-                  <li><code>20261021140908_rename_frighton_id_to_student_number.sql</code></li>
-                </ul>
-              </li>
-              <li>
-                Copy your <strong>Project URL</strong> and <strong>API Keys</strong> into:
-                <ul style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
-                  <li><code>client/.env</code> (URL + Anon Key)</li>
-                  <li><code>server/.env</code> (URL + Anon Key + Service Role Key)</li>
-                </ul>
-              </li>
-              <li>
-                Run <code>npm run dev</code> from the root directory to launch the unified development server.
-              </li>
-            </ol>
-          </div>
-        </section>
-      )}
-    </div>
+              <p className="access-note">For active Frighton University students and administrators. Contact the University Help Desk if you need assistance.</p>
+            </>
+          )}
+        </div>
+
+        <p className="footer-note"><span className="footer-dot" /> Secure university access <span className="footer-divider">|</span> © 2026 Frighton University</p>
+      </section>
+    </main>
   );
 }
 

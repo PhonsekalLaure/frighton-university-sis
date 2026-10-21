@@ -23,6 +23,13 @@ export const errorHandler = (
     res.status(400).json({ error: 'Request body must contain valid JSON.' });
     return;
   }
-  console.error('Unhandled SIS server error:', err.name || err.message);
+  // Keep configuration details out of the browser response, but make local
+  // development failures actionable instead of logging only "Error".
+  if (err.message === 'Supabase authentication is not configured.') {
+    console.error('Supabase authentication is not configured. Check server/.env.');
+    res.status(503).json({ error: 'Authentication service is not configured. Please contact the system administrator.' });
+    return;
+  }
+  console.error('Unhandled SIS server error:', err.stack || err.message);
   res.status(500).json({ error: 'An unexpected server error occurred. Please try again.' });
 };
