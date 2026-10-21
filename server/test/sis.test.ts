@@ -6,6 +6,7 @@ import { findUser, AuthError } from '../src/services/authService.js';
 import { DashboardClient, getDashboard } from '../src/services/dashboardService.js';
 import { ScheduleClient, getSchedule } from '../src/services/scheduleService.js';
 import { GradesClient, getGrades } from '../src/services/gradesService.js';
+import { BillingClient, getBilling } from '../src/services/billingService.js';
 import { readAccessToken, readCookie, setAuthCookies, clearAuthCookies } from '../src/utils/authCookies.js';
 import type { Request, Response } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -360,7 +361,60 @@ describe('SIS Backend Foundation & Security Verification', () => {
     assert.equal(grades.terms[1].courses.find((course) => course.id === 'withdrawn')?.gradeStatus, 'withdrawn');
   });
 
-  test('15. Dashboard aggregates profile, academic assignments, holds, and billing without enrollment data', async () => {
+  test('15. Billing requires an authenticated SIS session', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/billing/me`);
+    assert.equal(res.status, 401);
+    const data = await res.json();
+    assert.equal(data.error, 'Please sign in to access your account.');
+  });
+
+  test('16. Billing returns cashier-posted current and historical statements without a payment flow', async () => {
+    const results: Record<string, unknown> = {
+      profiles: { id: 'student-1' },
+      student_accounts: [
+        {
+          id: 'current-account', base_tuition: '4500', mandatory_fees: '350', scholarships: '500', status: 'open', due_date: '2026-11-15',
+          term: { id: 'term-current', code: 'FALL-2026', name: 'Fall 2026', start_date: '2026-09-01', end_date: '2026-12-20', is_active: true },
+          payments: [
+            { id: 'void-payment', amount: '500', reference_number: 'REC-VOID', receipt_status: 'void', paid_at: '2026-09-07T00:00:00Z' },
+            { id: 'cash-payment', amount: '1000', reference_number: 'REC-001', receipt_status: 'completed', paid_at: '2026-09-05T00:00:00Z' },
+          ],
+        },
+        {
+          id: 'history-account', base_tuition: '4300', mandatory_fees: '300', scholarships: '0', status: 'paid', due_date: '2026-04-15',
+          term: { id: 'term-history', code: 'SPRING-2026', name: 'Spring 2026', start_date: '2026-01-15', end_date: '2026-05-25', is_active: false },
+          payments: [{ id: 'history-payment', amount: '4600', reference_number: 'REC-OLD', receipt_status: 'completed', paid_at: '2026-03-10T00:00:00Z' }],
+        },
+      ],
+    };
+    const mockClient: BillingClient = {
+      from: (table: string) => {
+        const result = results[table] ?? null;
+        const builder: any = {
+          select: () => builder,
+          eq: () => builder,
+          maybeSingle: async () => ({ data: result, error: null }),
+          then: (onfulfilled: any, onrejected: any) => Promise.resolve({ data: result, error: null }).then(onfulfilled, onrejected),
+        };
+        return builder;
+      },
+    };
+
+    const billing = await getBilling('student-1', mockClient, new Date('2026-10-20T12:00:00.000Z'));
+    assert.equal(billing.isPaymentPortal, false);
+    assert.equal(billing.paymentChannel, 'cashier');
+    assert.equal(billing.currentStatement?.term.code, 'FALL-2026');
+    assert.equal(billing.currentStatement?.totalAssessed, 4350);
+    assert.equal(billing.currentStatement?.totalPaid, 1000);
+    assert.equal(billing.currentStatement?.outstandingBalance, 3350);
+    assert.equal(billing.currentStatement?.statementStatus, 'partially_paid');
+    assert.equal(billing.currentStatement?.payments[0].receiptStatus, 'void');
+    assert.equal(billing.currentStatement?.payments[0].countsTowardBalance, false);
+    assert.deepEqual(billing.statements.map((statement) => statement.term.code), ['FALL-2026', 'SPRING-2026']);
+    assert.equal(billing.statements[1].statementStatus, 'paid');
+  });
+
+  test('17. Dashboard aggregates profile, academic assignments, holds, and billing without enrollment data', async () => {
     const results: Record<string, unknown> = {
       profiles: {
         id: 'student-1', student_number: 'STU-2026-0001', first_name: 'Jane', last_name: 'Student',
