@@ -5,6 +5,7 @@ import { createApp } from '../src/app.js';
 import { findUser, AuthError } from '../src/services/authService.js';
 import { DashboardClient, getDashboard } from '../src/services/dashboardService.js';
 import { ScheduleClient, getSchedule } from '../src/services/scheduleService.js';
+import { GradesClient, getGrades } from '../src/services/gradesService.js';
 import { readAccessToken, readCookie, setAuthCookies, clearAuthCookies } from '../src/utils/authCookies.js';
 import type { Request, Response } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -309,7 +310,57 @@ describe('SIS Backend Foundation & Security Verification', () => {
     assert.deepEqual(await getSchedule('student-1', mockClient), { currentTerm: null, classes: [] });
   });
 
-  test('13. Dashboard aggregates profile, academic assignments, holds, and billing without enrollment data', async () => {
+  test('13. Grades requires an authenticated SIS session', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/grades/me`);
+    assert.equal(res.status, 401);
+    const data = await res.json();
+    assert.equal(data.error, 'Please sign in to access your account.');
+  });
+
+  test('14. Grades presents a read-only transcript and excludes IP/W from GPA', async () => {
+    const results: Record<string, unknown> = {
+      profiles: { id: 'student-1' },
+      academic_records: [
+        {
+          id: 'fall-final', grade: 'A', is_current: false,
+          section: { section_number: '01', course: { course_code: 'CS-101', title: 'Programming I', credits: 3 }, term: { id: 'term-fall', code: 'FALL-2025', name: 'Fall 2025', start_date: '2025-09-01', end_date: '2025-12-20', is_active: false } },
+        },
+        {
+          id: 'spring-final', grade: 'B+', is_current: false,
+          section: { section_number: '01', course: { course_code: 'CS-220', title: 'Algorithms', credits: 4 }, term: { id: 'term-spring', code: 'SPRING-2026', name: 'Spring 2026', start_date: '2026-01-15', end_date: '2026-05-25', is_active: false } },
+        },
+        {
+          id: 'current-ip', grade: 'IP', is_current: true,
+          section: { section_number: '01', course: { course_code: 'HIST-105', title: 'World History', credits: 3 }, term: { id: 'term-current', code: 'FALL-2026', name: 'Fall 2026', start_date: '2026-09-01', end_date: '2026-12-20', is_active: true } },
+        },
+        {
+          id: 'withdrawn', grade: 'W', is_current: false,
+          section: { section_number: '01', course: { course_code: 'BIO-110', title: 'Biology', credits: 3 }, term: { id: 'term-spring', code: 'SPRING-2026', name: 'Spring 2026', start_date: '2026-01-15', end_date: '2026-05-25', is_active: false } },
+        },
+      ],
+    };
+    const mockClient: GradesClient = {
+      from: (table: string) => {
+        const result = results[table] ?? null;
+        const builder: any = {
+          select: () => builder,
+          eq: () => builder,
+          maybeSingle: async () => ({ data: result, error: null }),
+          then: (onfulfilled: any, onrejected: any) => Promise.resolve({ data: result, error: null }).then(onfulfilled, onrejected),
+        };
+        return builder;
+      },
+    };
+
+    const grades = await getGrades('student-1', mockClient);
+    assert.deepEqual(grades.summary, { cumulativeGpa: 3.6, attemptedCredits: 7, creditsEarned: 7 });
+    assert.deepEqual(grades.terms.map((term) => term.code), ['FALL-2026', 'SPRING-2026', 'FALL-2025']);
+    assert.equal(grades.terms[0].gpa, null);
+    assert.equal(grades.terms[0].courses[0].gradeStatus, 'in_progress');
+    assert.equal(grades.terms[1].courses.find((course) => course.id === 'withdrawn')?.gradeStatus, 'withdrawn');
+  });
+
+  test('15. Dashboard aggregates profile, academic assignments, holds, and billing without enrollment data', async () => {
     const results: Record<string, unknown> = {
       profiles: {
         id: 'student-1', student_number: 'STU-2026-0001', first_name: 'Jane', last_name: 'Student',

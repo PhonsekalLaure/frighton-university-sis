@@ -5,6 +5,7 @@ import { authRouter } from './routes/authRoutes.js';
 import { healthRouter } from './routes/healthRoutes.js';
 import { integrationRouter } from './routes/integrationRoutes.js';
 import { dashboardRouter } from './routes/dashboardRoutes.js';
+import { gradesRouter } from './routes/gradesRoutes.js';
 import { scheduleRouter } from './routes/scheduleRoutes.js';
 import { protectCookieRequests } from './middlewares/auth.js';
 import { errorHandler } from './middlewares/errorHandler.js';
@@ -34,6 +35,7 @@ export const createApp = (): Express => {
   app.use('/api/auth', authRouter);
   app.use('/api/v1/integration', integrationRouter);
   app.use('/api/v1/dashboard', dashboardRouter);
+  app.use('/api/v1/grades', gradesRouter);
   app.use('/api/v1/schedule', scheduleRouter);
 
   // Centralized Error Handling

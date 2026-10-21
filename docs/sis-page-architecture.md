@@ -43,7 +43,7 @@ The dashboard must render assignment language such as “current academic credit
 | Route | Audience | Backing tables | Notes |
 | --- | --- | --- | --- |
 | `/schedule` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | `GET /api/v1/schedule/me` is available; weekly and list views remain future UI work. |
-| `/grades` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | Transcript and GPA presentation are future UI/API work. |
+| `/grades` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | `GET /api/v1/grades/me` returns the static transcript and GPA; presentation remains future UI work. |
 | `/billing` | Student | `student_accounts`, `student_payments`, `academic_terms` | Do not add payment simulation without a protected write API. |
 | `/holds` | Student | `student_holds` | Library holds use `hold_type = 'library_debt'`. |
 | `/admin` | Admin | Portal tables above | Separate from the student dashboard; it is not implemented by the student route. |
