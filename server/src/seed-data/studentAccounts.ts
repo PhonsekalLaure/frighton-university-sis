@@ -1,6 +1,28 @@
 import type { StudentAccountSeed } from './types.js';
 
 export const studentAccounts: readonly StudentAccountSeed[] = [
+  // Completed cashier statements make the Billing UI's term-history view useful.
+  { studentNumber: 'STU-2026-0001', termCode: 'FALL-2025', baseTuition: 4200, mandatoryFees: 300, scholarships: 0, status: 'paid', dueDate: '2025-11-15' },
+  { studentNumber: 'STU-2026-0002', termCode: 'FALL-2025', baseTuition: 4800, mandatoryFees: 300, scholarships: 0, status: 'paid', dueDate: '2025-11-15' },
+  { studentNumber: 'STU-2026-0003', termCode: 'FALL-2025', baseTuition: 4600, mandatoryFees: 250, scholarships: 0, status: 'paid', dueDate: '2025-11-15' },
+  { studentNumber: 'STU-2026-0004', termCode: 'FALL-2025', baseTuition: 5200, mandatoryFees: 350, scholarships: 1300, status: 'paid', dueDate: '2025-11-15' },
+  { studentNumber: 'STU-2026-0005', termCode: 'FALL-2025', baseTuition: 4200, mandatoryFees: 300, scholarships: 0, status: 'paid', dueDate: '2025-11-15' },
+  { studentNumber: 'STU-2026-0006', termCode: 'FALL-2025', baseTuition: 4600, mandatoryFees: 250, scholarships: 400, status: 'paid', dueDate: '2025-11-15' },
+  { studentNumber: 'STU-2026-0007', termCode: 'FALL-2025', baseTuition: 4800, mandatoryFees: 300, scholarships: 400, status: 'paid', dueDate: '2025-11-15' },
+  { studentNumber: 'STU-2026-0008', termCode: 'FALL-2025', baseTuition: 5200, mandatoryFees: 350, scholarships: 900, status: 'paid', dueDate: '2025-11-15' },
+  { studentNumber: 'STU-2026-0009', termCode: 'FALL-2025', baseTuition: 4200, mandatoryFees: 300, scholarships: 750, status: 'paid', dueDate: '2025-11-15' },
+  { studentNumber: 'STU-2026-0010', termCode: 'FALL-2025', baseTuition: 4600, mandatoryFees: 250, scholarships: 0, status: 'paid', dueDate: '2025-11-15' },
+  { studentNumber: 'STU-2026-0001', termCode: 'SPRING-2026', baseTuition: 4300, mandatoryFees: 300, scholarships: 0, status: 'paid', dueDate: '2026-04-15' },
+  { studentNumber: 'STU-2026-0002', termCode: 'SPRING-2026', baseTuition: 4900, mandatoryFees: 300, scholarships: 0, status: 'paid', dueDate: '2026-04-15' },
+  { studentNumber: 'STU-2026-0003', termCode: 'SPRING-2026', baseTuition: 4700, mandatoryFees: 250, scholarships: 0, status: 'paid', dueDate: '2026-04-15' },
+  { studentNumber: 'STU-2026-0004', termCode: 'SPRING-2026', baseTuition: 5300, mandatoryFees: 350, scholarships: 1400, status: 'paid', dueDate: '2026-04-15' },
+  { studentNumber: 'STU-2026-0005', termCode: 'SPRING-2026', baseTuition: 4300, mandatoryFees: 300, scholarships: 0, status: 'paid', dueDate: '2026-04-15' },
+  { studentNumber: 'STU-2026-0006', termCode: 'SPRING-2026', baseTuition: 4700, mandatoryFees: 250, scholarships: 450, status: 'paid', dueDate: '2026-04-15' },
+  { studentNumber: 'STU-2026-0007', termCode: 'SPRING-2026', baseTuition: 4900, mandatoryFees: 300, scholarships: 500, status: 'paid', dueDate: '2026-04-15' },
+  { studentNumber: 'STU-2026-0008', termCode: 'SPRING-2026', baseTuition: 5300, mandatoryFees: 350, scholarships: 950, status: 'paid', dueDate: '2026-04-15' },
+  { studentNumber: 'STU-2026-0009', termCode: 'SPRING-2026', baseTuition: 4300, mandatoryFees: 300, scholarships: 800, status: 'paid', dueDate: '2026-04-15' },
+  { studentNumber: 'STU-2026-0010', termCode: 'SPRING-2026', baseTuition: 4700, mandatoryFees: 250, scholarships: 0, status: 'paid', dueDate: '2026-04-15' },
+
   { studentNumber: 'STU-2026-0001', termCode: 'FALL-2026', baseTuition: 4500, mandatoryFees: 350, scholarships: 500, status: 'open', dueDate: '2026-11-15' },
   { studentNumber: 'STU-2026-0002', termCode: 'FALL-2026', baseTuition: 5100, mandatoryFees: 300, scholarships: 0, status: 'open', dueDate: '2026-10-15' },
   { studentNumber: 'STU-2026-0003', termCode: 'FALL-2026', baseTuition: 4800, mandatoryFees: 250, scholarships: 0, status: 'paid', dueDate: '2026-11-15' },

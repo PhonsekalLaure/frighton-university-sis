@@ -4,6 +4,9 @@ import http from 'node:http';
 import { createApp } from '../src/app.js';
 import { findUser, AuthError } from '../src/services/authService.js';
 import { DashboardClient, getDashboard } from '../src/services/dashboardService.js';
+import { ScheduleClient, getSchedule } from '../src/services/scheduleService.js';
+import { GradesClient, getGrades } from '../src/services/gradesService.js';
+import { BillingClient, getBilling } from '../src/services/billingService.js';
 import { readAccessToken, readCookie, setAuthCookies, clearAuthCookies } from '../src/utils/authCookies.js';
 import type { Request, Response } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -240,7 +243,178 @@ describe('SIS Backend Foundation & Security Verification', () => {
     assert.equal(data.error, 'Please sign in to access your account.');
   });
 
-  test('10. Dashboard aggregates profile, academic assignments, holds, and billing without enrollment data', async () => {
+  test('10. Schedule requires an authenticated SIS session', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/schedule/me`);
+    assert.equal(res.status, 401);
+    const data = await res.json();
+    assert.equal(data.error, 'Please sign in to access your account.');
+  });
+
+  test('11. Schedule returns only current assignments in the active term', async () => {
+    const results: Record<string, unknown> = {
+      profiles: { id: 'student-1' },
+      academic_terms: { id: 'term-1', code: '2026-1', name: 'First Semester 2026', start_date: '2026-08-01', end_date: '2026-12-20' },
+      academic_records: [
+        {
+          id: 'record-2',
+          section: {
+            term_id: 'term-1', section_number: '01', schedule: 'Tue/Thu 11:00 - 12:30 PM', room: 'Lab 204',
+            instructor_name: 'Dr. Turing', instructor_email: 'turing@frighton.edu',
+            course: { course_code: 'CS-220', title: 'Algorithms', credits: 3 },
+          },
+        },
+        {
+          id: 'record-1',
+          section: {
+            term_id: 'term-1', section_number: '02', schedule: 'Mon/Wed 09:00 - 10:30 AM', room: 'Hall 101',
+            instructor_name: 'Dr. Lovelace', instructor_email: 'ada@frighton.edu',
+            course: { course_code: 'CS-101', title: 'Programming', credits: '4' },
+          },
+        },
+        { id: 'incomplete-record', section: null },
+      ],
+    };
+    const mockClient: ScheduleClient = {
+      from: (table: string) => {
+        const result = results[table] ?? null;
+        const builder: any = {
+          select: () => builder,
+          eq: () => builder,
+          maybeSingle: async () => ({ data: result, error: null }),
+          then: (onfulfilled: any, onrejected: any) => Promise.resolve({ data: result, error: null }).then(onfulfilled, onrejected),
+        };
+        return builder;
+      },
+    };
+
+    const schedule = await getSchedule('student-1', mockClient);
+    assert.equal(schedule.currentTerm?.code, '2026-1');
+    assert.equal(schedule.classes.length, 2);
+    assert.equal(schedule.classes[0].courseCode, 'CS-101');
+    assert.equal(schedule.classes[0].credits, 4);
+    assert.deepEqual(schedule.classes[0].instructor, { name: 'Dr. Lovelace', email: 'ada@frighton.edu' });
+    assert.equal(schedule.classes[1].courseCode, 'CS-220');
+  });
+
+  test('12. Schedule has no classes when there is no active term', async () => {
+    const mockClient: ScheduleClient = {
+      from: (table: string) => {
+        const result = table === 'profiles' ? { id: 'student-1' } : null;
+        const builder: any = {
+          select: () => builder,
+          eq: () => builder,
+          maybeSingle: async () => ({ data: result, error: null }),
+        };
+        return builder;
+      },
+    };
+    assert.deepEqual(await getSchedule('student-1', mockClient), { currentTerm: null, classes: [] });
+  });
+
+  test('13. Grades requires an authenticated SIS session', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/grades/me`);
+    assert.equal(res.status, 401);
+    const data = await res.json();
+    assert.equal(data.error, 'Please sign in to access your account.');
+  });
+
+  test('14. Grades presents a read-only transcript and excludes IP/W from GPA', async () => {
+    const results: Record<string, unknown> = {
+      profiles: { id: 'student-1' },
+      academic_records: [
+        {
+          id: 'fall-final', grade: 'A', is_current: false,
+          section: { section_number: '01', course: { course_code: 'CS-101', title: 'Programming I', credits: 3 }, term: { id: 'term-fall', code: 'FALL-2025', name: 'Fall 2025', start_date: '2025-09-01', end_date: '2025-12-20', is_active: false } },
+        },
+        {
+          id: 'spring-final', grade: 'B+', is_current: false,
+          section: { section_number: '01', course: { course_code: 'CS-220', title: 'Algorithms', credits: 4 }, term: { id: 'term-spring', code: 'SPRING-2026', name: 'Spring 2026', start_date: '2026-01-15', end_date: '2026-05-25', is_active: false } },
+        },
+        {
+          id: 'current-ip', grade: 'IP', is_current: true,
+          section: { section_number: '01', course: { course_code: 'HIST-105', title: 'World History', credits: 3 }, term: { id: 'term-current', code: 'FALL-2026', name: 'Fall 2026', start_date: '2026-09-01', end_date: '2026-12-20', is_active: true } },
+        },
+        {
+          id: 'withdrawn', grade: 'W', is_current: false,
+          section: { section_number: '01', course: { course_code: 'BIO-110', title: 'Biology', credits: 3 }, term: { id: 'term-spring', code: 'SPRING-2026', name: 'Spring 2026', start_date: '2026-01-15', end_date: '2026-05-25', is_active: false } },
+        },
+      ],
+    };
+    const mockClient: GradesClient = {
+      from: (table: string) => {
+        const result = results[table] ?? null;
+        const builder: any = {
+          select: () => builder,
+          eq: () => builder,
+          maybeSingle: async () => ({ data: result, error: null }),
+          then: (onfulfilled: any, onrejected: any) => Promise.resolve({ data: result, error: null }).then(onfulfilled, onrejected),
+        };
+        return builder;
+      },
+    };
+
+    const grades = await getGrades('student-1', mockClient);
+    assert.deepEqual(grades.summary, { cumulativeGpa: 3.6, attemptedCredits: 7, creditsEarned: 7 });
+    assert.deepEqual(grades.terms.map((term) => term.code), ['FALL-2026', 'SPRING-2026', 'FALL-2025']);
+    assert.equal(grades.terms[0].gpa, null);
+    assert.equal(grades.terms[0].courses[0].gradeStatus, 'in_progress');
+    assert.equal(grades.terms[1].courses.find((course) => course.id === 'withdrawn')?.gradeStatus, 'withdrawn');
+  });
+
+  test('15. Billing requires an authenticated SIS session', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/billing/me`);
+    assert.equal(res.status, 401);
+    const data = await res.json();
+    assert.equal(data.error, 'Please sign in to access your account.');
+  });
+
+  test('16. Billing returns cashier-posted current and historical statements without a payment flow', async () => {
+    const results: Record<string, unknown> = {
+      profiles: { id: 'student-1' },
+      student_accounts: [
+        {
+          id: 'current-account', base_tuition: '4500', mandatory_fees: '350', scholarships: '500', status: 'open', due_date: '2026-11-15',
+          term: { id: 'term-current', code: 'FALL-2026', name: 'Fall 2026', start_date: '2026-09-01', end_date: '2026-12-20', is_active: true },
+          payments: [
+            { id: 'void-payment', amount: '500', reference_number: 'REC-VOID', receipt_status: 'void', paid_at: '2026-09-07T00:00:00Z' },
+            { id: 'cash-payment', amount: '1000', reference_number: 'REC-001', receipt_status: 'completed', paid_at: '2026-09-05T00:00:00Z' },
+          ],
+        },
+        {
+          id: 'history-account', base_tuition: '4300', mandatory_fees: '300', scholarships: '0', status: 'paid', due_date: '2026-04-15',
+          term: { id: 'term-history', code: 'SPRING-2026', name: 'Spring 2026', start_date: '2026-01-15', end_date: '2026-05-25', is_active: false },
+          payments: [{ id: 'history-payment', amount: '4600', reference_number: 'REC-OLD', receipt_status: 'completed', paid_at: '2026-03-10T00:00:00Z' }],
+        },
+      ],
+    };
+    const mockClient: BillingClient = {
+      from: (table: string) => {
+        const result = results[table] ?? null;
+        const builder: any = {
+          select: () => builder,
+          eq: () => builder,
+          maybeSingle: async () => ({ data: result, error: null }),
+          then: (onfulfilled: any, onrejected: any) => Promise.resolve({ data: result, error: null }).then(onfulfilled, onrejected),
+        };
+        return builder;
+      },
+    };
+
+    const billing = await getBilling('student-1', mockClient, new Date('2026-10-20T12:00:00.000Z'));
+    assert.equal(billing.isPaymentPortal, false);
+    assert.equal(billing.paymentChannel, 'cashier');
+    assert.equal(billing.currentStatement?.term.code, 'FALL-2026');
+    assert.equal(billing.currentStatement?.totalAssessed, 4350);
+    assert.equal(billing.currentStatement?.totalPaid, 1000);
+    assert.equal(billing.currentStatement?.outstandingBalance, 3350);
+    assert.equal(billing.currentStatement?.statementStatus, 'partially_paid');
+    assert.equal(billing.currentStatement?.payments[0].receiptStatus, 'void');
+    assert.equal(billing.currentStatement?.payments[0].countsTowardBalance, false);
+    assert.deepEqual(billing.statements.map((statement) => statement.term.code), ['FALL-2026', 'SPRING-2026']);
+    assert.equal(billing.statements[1].statementStatus, 'paid');
+  });
+
+  test('17. Dashboard aggregates profile, academic assignments, holds, and billing without enrollment data', async () => {
     const results: Record<string, unknown> = {
       profiles: {
         id: 'student-1', student_number: 'STU-2026-0001', first_name: 'Jane', last_name: 'Student',

@@ -1,6 +1,28 @@
 import type { PaymentSeed } from './types.js';
 
 export const payments: readonly PaymentSeed[] = [
+  // Cashier-issued receipts for completed terms; the SIS only displays them.
+  { studentNumber: 'STU-2026-0001', termCode: 'FALL-2025', amount: 4500, referenceNumber: 'REC-2025-0001', receiptStatus: 'completed', paidAt: '2025-10-08T03:15:00Z' },
+  { studentNumber: 'STU-2026-0002', termCode: 'FALL-2025', amount: 5100, referenceNumber: 'REC-2025-0002', receiptStatus: 'completed', paidAt: '2025-10-06T02:40:00Z' },
+  { studentNumber: 'STU-2026-0003', termCode: 'FALL-2025', amount: 4850, referenceNumber: 'REC-2025-0003', receiptStatus: 'completed', paidAt: '2025-10-10T06:05:00Z' },
+  { studentNumber: 'STU-2026-0004', termCode: 'FALL-2025', amount: 4250, referenceNumber: 'REC-2025-0004', receiptStatus: 'completed', paidAt: '2025-10-01T04:20:00Z' },
+  { studentNumber: 'STU-2026-0005', termCode: 'FALL-2025', amount: 4500, referenceNumber: 'REC-2025-0005', receiptStatus: 'completed', paidAt: '2025-10-09T07:10:00Z' },
+  { studentNumber: 'STU-2026-0006', termCode: 'FALL-2025', amount: 4450, referenceNumber: 'REC-2025-0006', receiptStatus: 'completed', paidAt: '2025-10-03T01:55:00Z' },
+  { studentNumber: 'STU-2026-0007', termCode: 'FALL-2025', amount: 4700, referenceNumber: 'REC-2025-0007', receiptStatus: 'completed', paidAt: '2025-10-11T05:30:00Z' },
+  { studentNumber: 'STU-2026-0008', termCode: 'FALL-2025', amount: 4650, referenceNumber: 'REC-2025-0008', receiptStatus: 'completed', paidAt: '2025-10-02T03:45:00Z' },
+  { studentNumber: 'STU-2026-0009', termCode: 'FALL-2025', amount: 3750, referenceNumber: 'REC-2025-0009', receiptStatus: 'completed', paidAt: '2025-10-07T02:25:00Z' },
+  { studentNumber: 'STU-2026-0010', termCode: 'FALL-2025', amount: 4850, referenceNumber: 'REC-2025-0010', receiptStatus: 'completed', paidAt: '2025-10-12T06:40:00Z' },
+  { studentNumber: 'STU-2026-0001', termCode: 'SPRING-2026', amount: 4600, referenceNumber: 'REC-2026-SPR-0001', receiptStatus: 'completed', paidAt: '2026-03-10T03:15:00Z' },
+  { studentNumber: 'STU-2026-0002', termCode: 'SPRING-2026', amount: 5200, referenceNumber: 'REC-2026-SPR-0002', receiptStatus: 'completed', paidAt: '2026-03-06T02:40:00Z' },
+  { studentNumber: 'STU-2026-0003', termCode: 'SPRING-2026', amount: 4950, referenceNumber: 'REC-2026-SPR-0003', receiptStatus: 'completed', paidAt: '2026-03-11T06:05:00Z' },
+  { studentNumber: 'STU-2026-0004', termCode: 'SPRING-2026', amount: 4250, referenceNumber: 'REC-2026-SPR-0004', receiptStatus: 'completed', paidAt: '2026-03-01T04:20:00Z' },
+  { studentNumber: 'STU-2026-0005', termCode: 'SPRING-2026', amount: 4600, referenceNumber: 'REC-2026-SPR-0005', receiptStatus: 'completed', paidAt: '2026-03-09T07:10:00Z' },
+  { studentNumber: 'STU-2026-0006', termCode: 'SPRING-2026', amount: 4500, referenceNumber: 'REC-2026-SPR-0006', receiptStatus: 'completed', paidAt: '2026-03-03T01:55:00Z' },
+  { studentNumber: 'STU-2026-0007', termCode: 'SPRING-2026', amount: 4700, referenceNumber: 'REC-2026-SPR-0007', receiptStatus: 'completed', paidAt: '2026-03-12T05:30:00Z' },
+  { studentNumber: 'STU-2026-0008', termCode: 'SPRING-2026', amount: 4700, referenceNumber: 'REC-2026-SPR-0008', receiptStatus: 'completed', paidAt: '2026-03-02T03:45:00Z' },
+  { studentNumber: 'STU-2026-0009', termCode: 'SPRING-2026', amount: 3800, referenceNumber: 'REC-2026-SPR-0009', receiptStatus: 'completed', paidAt: '2026-03-07T02:25:00Z' },
+  { studentNumber: 'STU-2026-0010', termCode: 'SPRING-2026', amount: 4950, referenceNumber: 'REC-2026-SPR-0010', receiptStatus: 'completed', paidAt: '2026-03-13T06:40:00Z' },
+
   { studentNumber: 'STU-2026-0001', termCode: 'FALL-2026', amount: 1000, referenceNumber: 'REC-2026-0001', receiptStatus: 'completed', paidAt: '2026-09-05T14:20:00Z' },
   { studentNumber: 'STU-2026-0003', termCode: 'FALL-2026', amount: 5050, referenceNumber: 'REC-2026-0003', receiptStatus: 'completed', paidAt: '2026-09-02T09:15:00Z' },
   { studentNumber: 'STU-2026-0004', termCode: 'FALL-2026', amount: 4300, referenceNumber: 'REC-2026-0004', receiptStatus: 'completed', paidAt: '2026-08-28T11:45:00Z' },
