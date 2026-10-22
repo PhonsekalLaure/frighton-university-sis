@@ -1,4 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '../config/supabase.js';
 
 type SupabaseResult<T> = { data: T | null; error: { message: string } | null };

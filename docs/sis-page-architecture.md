@@ -50,7 +50,7 @@ The dashboard must render assignment language such as "current academic credits"
 | `/billing` | Student | `student_accounts`, `student_payments`, `academic_terms` | `GET /api/v1/billing/me` returns the current balance and historical cashier-posted statements. It is not an online payment portal. |
 | `/library` | Student | LMS `books`, `reservations`, `borrow_records` | Stage 1 shows an integration-pending landing page. Stage 2 adds catalog, reservation, loan, due-date, and read-only fine data. |
 | `/holds` | Student | SIS `student_holds` | `GET /api/v1/holds/me` and the read-only account-restrictions page are implemented. Library restrictions use `hold_type = 'library_debt'`. |
-| `/admin` | Admin | SIS portal tables | Separate from the student dashboard; it is not implemented by a student route. |
+| `/admin` | Admin | SIS portal tables | The backend API is implemented under `/api/v1/admin`; the frontend still displays the administrator handoff. |
 
 ## UI shell
 
@@ -114,9 +114,51 @@ The Billing page is a read-only statement center, not a payment gateway. The fro
 3. Replace the Library pending state with catalog search, available-copy pickup reservation, active reservations, current loans, and read-only unpaid fines.
 4. Implement the Holds read API and `/holds` view, including active restrictions and resolved history.
 5. Complete remaining student pages against their existing student-only APIs.
-6. Build the separate admin API and console with explicit admin authorization.
+6. Build the separate admin console against the implemented admin API below.
 
 Steps 1 and 4 are the completed Stage 1 baseline. Steps 2 and 3 require the separate LMS repository and test environment; they are not implemented in the SIS while its service contract is unavailable.
+
+## Admin backend contract
+
+All `/api/v1/admin` routes require an active authenticated directory administrator (`requireAuth` and `requireAdmin`). Student `/me` routes stay student-only. This release provides account lifecycle writes; academic records, schedules, holds, billing, courses, sections, and LMS records are read-only through the admin API.
+
+| Method and route | Response / behavior |
+| --- | --- |
+| `GET /api/v1/admin/dashboard` | `metrics` (`totalStudents`, `activeStudents`, `inactiveStudents`, `probationStudents`, `studentsWithActiveHolds`), nullable `currentTerm`, and ten newest `recentActivity` audit events. Multiple holds on one student count once in the dashboard. |
+| `GET /api/v1/admin/students` | `{ items, page, pageSize, total, totalPages }`. Filters: `q`, `accessStatus=active\|inactive`, `academicStatus`, `department`, `page`, `pageSize`. Literal case-insensitive substring search across name, email, and student number; department is an exact case-insensitive match. Ordering: case-insensitive last name, first name, then UUID. |
+| `POST /api/v1/admin/students` | `201 { student }`. Requires `firstName`, `lastName`, `email`, `studentNumber`, `department`, `program`, `yearLevel`, `academicStatus`. Optional `middleName`, `avatarUrl`. Invites by email and provisions shared directory + SIS profile. |
+| `GET /api/v1/admin/students/:studentId` | `{ student, dashboard, schedule, grades, holds, billing }`. `student.auth` contains nullable `invitedAt`, `emailConfirmedAt`, `lastSignInAt`, or is null when no Auth identity matches. Auth UUIDs and credentials are never returned. Domain sections use the existing student aggregation rules. |
+| `PATCH /api/v1/admin/students/:studentId` | `200 { student }`. Editable fields: `firstName`, `middleName`, `lastName`, `email`, `department`, `program`, `yearLevel`, `academicStatus`, `avatarUrl`. Student number and role are immutable. |
+| `POST /api/v1/admin/students/:studentId/deactivate` | `200 { student }`; changes only directory access state. |
+| `POST /api/v1/admin/students/:studentId/reactivate` | `200 { student }`; restores directory access. Academic status remains independent. |
+| `POST /api/v1/admin/students/:studentId/password-recovery` | `202 { message }` after Supabase accepts the recovery-email request and its audit event commits. |
+| `GET /api/v1/admin/audit-logs` | `{ items, page, pageSize, total, totalPages }`. Filters: `action`, `studentId`, `actorId`, `from`, `to`, `page`, `pageSize`. Date filters are inclusive ISO timestamps with a timezone. Order: timestamp descending, UUID descending. |
+
+Student scope is a shared-directory student (`Students`/`student`, normalized case-insensitively) with a SIS `student` profile. Admin and librarian records are never student targets. Student snapshots include UUID, student number, name, email, academic-profile fields, `isActive`, and timestamps; student-list rows also contain `activeHoldCount`. A valid missing student UUID returns `404`; a malformed UUID returns `400`.
+
+Pagination defaults to page 1 and 25 rows; page size is limited to 100. Invalid/repeated/unknown query parameters and unknown/immutable body fields return `400`. New student numbers must match `STU-YYYY-NNNN` or a longer numeric sequence (maximum 50 characters). Names and department are limited to 100 characters, program to 150, email to 254, search to 100, and avatar URL to 2048. Year level is 1–4. Optional profile fields can be cleared with null; whitespace-only optional text clears it. Creation requires a non-empty department/program and a year level. Email is trimmed and lowercased. Bodyless actions accept only an empty body/object.
+
+### Identity synchronization and audit behavior
+
+- `admin_write_student` commits directory/profile changes and their audit event together. Only the service role can execute admin RPCs; the database rechecks the actor's active directory-admin role.
+- Auth identities are resolved by email, not by assuming `users.users_id` equals `auth.users.id`. A minimal service-only SQL lookup avoids exposing Auth secrets or enumerating the Auth directory through the API.
+- Invitations use `CLIENT_URL` plus `/set-password`. Configure this exact URL in Supabase Auth's redirect allowlist. The frontend acceptance/password screen is a later milestone; sending mail successfully does not yet make that screen available.
+- Admins never supply passwords. The legacy required directory password column receives a fixed managed-by-Auth marker and is never read or returned by this feature.
+- Provisioning failures remove only a newly created invitation whose ownership can be confirmed. Existing Auth or directory accounts are never adopted or deleted. Duplicate email/student number returns `409`.
+- Edits use a database lease (five-minute expiry) around Auth and SQL operations to serialize account changes across API replicas. A conflicting lease returns `409`. Auth email updates are rolled back if the SQL transaction rejects the edit. If rollback cannot be confirmed, the API returns `503`, retains the lease, and logs only operation/student identifiers for review.
+- RPC retries share an operation UUID; audit IDs make committed writes safe to retry after a lost response. Connection failures, unknown-completion SQLSTATEs such as `08007`/`40003`, and unfamiliar errors are treated as uncertain, not proof of rollback. An uncertain commit is reconciled against the audit record before attempting compensation. If it cannot be resolved, the identity is retained for review rather than risking deletion or reversal of a committed change. Confirmed retries reload the student profile so a redacted audit snapshot cannot replace the actual profile response; a reload failure never triggers compensation of a known commit.
+- Deactivation applies to subsequent authenticated requests, including existing sessions, because `requireAuth` rechecks directory access. It does not ban the shared Auth identity, change academic status, or revoke in-flight requests.
+- Profile edits with no field changes and already-active/already-inactive requests do not add duplicate audit events. Reads are not logged. There is no hard-delete route.
+- Audit actions: `student.account.created`, `student.profile.updated`, `student.access.deactivated`, `student.access.reactivated`, `student.password_recovery.requested`. Each event has `id`, `actorId`, `actor`, `action`, `studentId`, `target`, `changes`, `createdAt`; changes map field names to `{ before, after }`. Actor and target snapshots survive future account edits/deletion. No passwords, Auth metadata, tokens, cookies, recovery links, raw requests, or service keys are logged.
+- A database insertion trigger removes URL credentials, query parameters, and fragments from avatar URLs in audit targets and both change snapshots. Student profiles retain the complete URL. This protects RPC writes and direct service-role inserts; null avatars stay null and changes only to a URL signature still create an audit event. The follow-up migration leaves the original applied migration and existing append-only history unchanged.
+- Audit rows are append-only, including a database trigger rejecting update/delete/truncate. Active admins can read through the API or audit RLS; students, inactive admins, and anonymous users cannot read them. Browser roles cannot write audit records.
+- Email delivery and SQL cannot share a transaction. A successful mail submission followed by an unavailable audit database returns `503`; the email cannot be recalled. Review the account/audit state before retrying such an uncertain result. Supabase acceptance also does not prove delivery to the inbox.
+
+### Admin verification and rollout
+
+Run `npm run test -w server` and `npm run build -w server`. Tests inject Auth/mail clients; no invitations or recovery emails are sent. To validate pending migrations and SQL assertions against the linked SIS project before applying them, run `npm run test:admin-db -w server -- --preview-migration <pending-filename.sql> [more-filenames.sql]` in migration order. For the audit correction, supply `20261022055741_admin_audit_url_redaction.sql`. The script verifies the configured and linked project identities, uses synthetic transaction-local records, and rolls everything back. After applying the migrations, run `npm run test:admin-db -w server` to repeat those rollback-only assertions against the installed schema.
+
+Create migrations with `supabase migration new`, review `supabase db push --dry-run`, then apply to the verified SIS project. The additive migration does not rewrite existing identity, academic, billing, or LMS data. Audit snapshots are deliberately preserved by the existing SIS reset script. Unavailable Auth/database dependencies return `503`; internal errors and secrets are not returned to clients.
 
 ## Explicit boundaries
 

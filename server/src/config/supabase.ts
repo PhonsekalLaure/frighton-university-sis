@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { config } from './env.js';
 
 let supabaseAdminClient: SupabaseClient | null = null;
+let adminPortalClient: SupabaseClient | null = null;
 const authOptions = { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false };
 
 function requireConfig(key: string): void {
@@ -24,6 +25,20 @@ export const getSupabaseAdmin = (): SupabaseClient => {
     });
   }
   return supabaseAdminClient;
+};
+
+// Bound the external Auth/REST calls covered by admin account-change leases.
+export const getAdminPortalClient = (): SupabaseClient => {
+  if (!adminPortalClient) {
+    requireConfig(config.supabase.serviceRoleKey);
+    adminPortalClient = createClient(config.supabase.url, config.supabase.serviceRoleKey, {
+      auth: authOptions,
+      global: { fetch: (url, options) => fetch(url, { ...options,
+        signal: AbortSignal.any([AbortSignal.timeout(15000), ...(options?.signal ? [options.signal] : [])]),
+      }) },
+    });
+  }
+  return adminPortalClient;
 };
 
 // Backwards-compatible alias for standard Supabase client operations
