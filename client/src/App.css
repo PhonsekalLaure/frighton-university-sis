@@ -1,3 +1,54 @@
+/* Holds, Library-pending, and administrator-handoff views */
+.holds-list { display: grid; gap: 12px; margin-top: 16px; }
+.hold-card { grid-template-columns: auto minmax(0, 1fr); border: 1px solid #e2dfd8; border-radius: 8px; padding: 17px; background: rgba(255,255,255,.92); }
+.hold-card-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 9px; color: #a56a25; background: #faf0df; }
+.hold-card-main { min-width: 0; }
+.hold-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.hold-card-heading h2 { color: #172746; font-size: 14px; margin: 5px 0 0; }
+.hold-active { color: #9a671e; background: #fff0d4; }
+.hold-resolved { color: #4d8375; background: #e3eee8; }
+.hold-details { display: flex; flex-wrap: wrap; gap: 12px 26px; margin: 14px 0 0; }
+.hold-details div { display: grid; gap: 3px; }
+.hold-details dt { color: #8a93a0; font-size: 10px; }
+.hold-details dd { margin: 0; color: #4d5c72; font-size: 11px; font-weight: 600; }
+.hold-guidance { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 15px; color: #657384; font-size: 11px; line-height: 1.5; }
+.hold-guidance svg { flex: 0 0 auto; color: #a56a25; }
+.hold-guidance button { border: 0; padding: 0; color: #1d6564; background: transparent; font: inherit; font-weight: 700; cursor: pointer; }
+.hold-guidance button:hover { text-decoration: underline; }
+.resolved-section { margin-top: 22px; }
+.library-pending-card { display: flex; align-items: flex-start; gap: 16px; border: 1px solid #dfe5dc; border-radius: 8px; padding: 24px; background: #f0f3ed; }
+.library-pending-card h2 { color: #172746; font-size: 18px; margin: 6px 0 7px; }
+.library-pending-card p:not(.eyebrow) { color: #657384; font-size: 12px; line-height: 1.6; margin: 0; }
+.library-pending-icon { width: 45px; height: 45px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 9px; color: #2e716e; background: #e4ebe3; }
+.library-preview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 17px; }
+.library-preview { min-height: 150px; }
+.library-preview h2 { color: #172746; font-size: 15px; margin: 15px 0 7px; }
+.library-preview p { color: #657384; font-size: 12px; line-height: 1.55; margin: 0; }
+.admin-handoff-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #f6f4ef; }
+.admin-handoff-card { width: min(100%, 560px); padding: 40px; border: 1px solid #dde5e9; border-radius: 18px; background: #fff; box-shadow: 0 18px 44px rgba(34,54,80,.1); text-align: center; }
+.admin-handoff-icon { width: 54px; height: 54px; display: grid; place-items: center; margin: 0 auto 15px; border-radius: 16px; color: #1b7285; background: #e8f4f5; }
+.admin-handoff-card h1 { margin-top: 9px; }
+.admin-handoff-note { display: flex; align-items: flex-start; gap: 8px; margin-top: 20px; padding: 13px; border-radius: 7px; color: #607084; background: #f1f0e8; font-size: 11px; line-height: 1.5; text-align: left; }
+.admin-handoff-note svg { flex: 0 0 auto; color: #4d8375; }
+
+@media (max-width: 680px) {
+  .hold-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .library-pending-card {
+    flex-direction: column;
+  }
+
+  .library-preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-handoff-card {
+    padding: 30px 22px;
+  }
+}
+
 .login-page { min-height: 100vh; display: grid; place-items: center; position: relative; overflow: hidden; padding: 44px 24px; background: #f6f4ef; }
 .login-page::before { content: ''; position: absolute; inset: 0; background: linear-gradient(118deg, rgba(255,255,255,.5), transparent 40%, rgba(235,231,219,.35)); pointer-events: none; }
 .ambient-glow { position: absolute; width: 360px; height: 360px; border-radius: 50%; filter: blur(2px); opacity: .34; pointer-events: none; }

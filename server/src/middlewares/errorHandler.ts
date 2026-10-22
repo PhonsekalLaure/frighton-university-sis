@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthError } from '../services/authService.js';
+import { HoldsError } from '../services/holdsService.js';
 
 export const errorHandler = (
   err: Error & { status?: number },
@@ -7,7 +8,7 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ): void => {
-  if (err instanceof AuthError) {
+  if (err instanceof AuthError || err instanceof HoldsError) {
     res.status(err.status).json({ error: err.message });
     return;
   }

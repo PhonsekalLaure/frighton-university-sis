@@ -1,8 +1,8 @@
-import { Bell, BookOpen, CalendarDays, CreditCard, GraduationCap, LayoutDashboard, LogOut, ScrollText } from 'lucide-react';
+import { Bell, BookOpen, CalendarDays, CreditCard, GraduationCap, LayoutDashboard, LibraryBig, LogOut, ScrollText, ShieldAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { SignedInUser } from '../types/dashboard';
 
-export type PortalView = 'dashboard' | 'schedule' | 'grades' | 'billing';
+export type PortalView = 'dashboard' | 'schedule' | 'grades' | 'billing' | 'library' | 'holds';
 
 interface AppShellProps { user: SignedInUser; activeView: PortalView; onNavigate: (view: PortalView) => void; onLogout: () => void; children: ReactNode; }
 
@@ -11,6 +11,8 @@ const navigation: Array<{ view: PortalView; label: string; icon: typeof LayoutDa
   { view: 'schedule', label: 'My schedule', icon: CalendarDays },
   { view: 'grades', label: 'Grades', icon: GraduationCap },
   { view: 'billing', label: 'Billing', icon: CreditCard },
+  { view: 'library', label: 'Library', icon: LibraryBig },
+  { view: 'holds', label: 'Holds', icon: ShieldAlert },
 ];
 
 export function AppShell({ user, activeView, onNavigate, onLogout, children }: AppShellProps) {

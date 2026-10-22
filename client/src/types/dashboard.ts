@@ -54,3 +54,19 @@ export interface BillingData {
   currentStatement: BillingStatement | null;
   statements: BillingStatement[];
 }
+
+export type StudentHoldType = 'library_debt' | 'academic_probation' | 'financial_delinquency' | 'disciplinary';
+
+export interface StudentHold {
+  id: string;
+  holdType: StudentHoldType;
+  reason: string;
+  placedBySystem: string;
+  placedAt: string;
+  resolvedAt: string | null;
+}
+
+export interface HoldsData {
+  activeHolds: StudentHold[];
+  resolvedHolds: StudentHold[];
+}

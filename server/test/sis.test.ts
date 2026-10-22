@@ -7,6 +7,8 @@ import { DashboardClient, getDashboard } from '../src/services/dashboardService.
 import { ScheduleClient, getSchedule } from '../src/services/scheduleService.js';
 import { GradesClient, getGrades } from '../src/services/gradesService.js';
 import { BillingClient, getBilling } from '../src/services/billingService.js';
+import { HoldsClient, getHolds } from '../src/services/holdsService.js';
+import { requireStudent } from '../src/middlewares/auth.js';
 import { readAccessToken, readCookie, setAuthCookies, clearAuthCookies } from '../src/utils/authCookies.js';
 import type { Request, Response } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -471,6 +473,65 @@ describe('SIS Backend Foundation & Security Verification', () => {
     assert.equal(dashboard.billing.outstandingBalance, 4250);
     assert.equal(dashboard.todaySchedule.length, 1);
     assert.equal(dashboard.todaySchedule[0].courseCode, 'CS201');
+  });
+
+  test('18. Holds returns only the student profile holds, split into active and resolved history', async () => {
+    const results: Record<string, unknown> = {
+      profiles: { id: 'student-1' },
+      student_holds: [
+        { id: 'active-earlier', hold_type: 'library_debt', reason: 'Overdue library item', placed_by_system: 'Frighton LMS', placed_at: '2026-09-10T00:00:00Z', resolved_at: null },
+        { id: 'active-later', hold_type: 'financial_delinquency', reason: 'Outstanding cashier balance', placed_by_system: 'SIS Billing', placed_at: '2026-10-05T00:00:00Z', resolved_at: null },
+        { id: 'resolved-later', hold_type: 'academic_probation', reason: 'Academic review', placed_by_system: 'Academic Affairs', placed_at: '2026-08-01T00:00:00Z', resolved_at: '2026-10-10T00:00:00Z' },
+        { id: 'resolved-earlier', hold_type: 'disciplinary', reason: 'Conduct review', placed_by_system: 'Student Affairs', placed_at: '2026-06-01T00:00:00Z', resolved_at: '2026-08-15T00:00:00Z' },
+      ],
+    };
+    const mockClient: HoldsClient = {
+      from: (table: string) => {
+        const result = results[table] ?? null;
+        const builder: any = {
+          select: () => builder,
+          eq: () => builder,
+          maybeSingle: async () => ({ data: result, error: null }),
+          then: (onfulfilled: any, onrejected: any) => Promise.resolve({ data: result, error: null }).then(onfulfilled, onrejected),
+        };
+        return builder;
+      },
+    };
+
+    const holds = await getHolds('student-1', mockClient);
+    assert.deepEqual(holds.activeHolds.map((hold) => hold.id), ['active-later', 'active-earlier']);
+    assert.deepEqual(holds.resolvedHolds.map((hold) => hold.id), ['resolved-later', 'resolved-earlier']);
+    assert.equal(holds.activeHolds[0].holdType, 'financial_delinquency');
+    assert.equal(holds.resolvedHolds[0].resolvedAt, '2026-10-10T00:00:00Z');
+  });
+
+  test('19. Holds endpoint rejects an unauthenticated request', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/holds/me`);
+    assert.equal(res.status, 401);
+    const data = await res.json();
+    assert.equal(data.error, 'Please sign in to access your account.');
+  });
+
+  test('20. Student guard rejects an administrator from the Holds endpoint', () => {
+    let statusCode = 0;
+    let body: unknown;
+    let nextCalled = false;
+    const response = {
+      locals: { user: { id: 'admin-1', role: 'admin' } },
+      status: (code: number) => {
+        statusCode = code;
+        return response;
+      },
+      json: (payload: unknown) => {
+        body = payload;
+        return response;
+      },
+    } as unknown as Response;
+
+    requireStudent({} as Request, response, () => { nextCalled = true; });
+    assert.equal(statusCode, 403);
+    assert.equal(nextCalled, false);
+    assert.deepEqual(body, { error: 'Forbidden: Access requires one of the following roles: [student]' });
   });
 
   test('Teardown server', async () => {

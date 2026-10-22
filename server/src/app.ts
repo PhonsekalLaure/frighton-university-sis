@@ -8,6 +8,7 @@ import { dashboardRouter } from './routes/dashboardRoutes.js';
 import { billingRouter } from './routes/billingRoutes.js';
 import { gradesRouter } from './routes/gradesRoutes.js';
 import { scheduleRouter } from './routes/scheduleRoutes.js';
+import { holdsRouter } from './routes/holdsRoutes.js';
 import { protectCookieRequests } from './middlewares/auth.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 
@@ -39,6 +40,7 @@ export const createApp = (): Express => {
   app.use('/api/v1/billing', billingRouter);
   app.use('/api/v1/grades', gradesRouter);
   app.use('/api/v1/schedule', scheduleRouter);
+  app.use('/api/v1/holds', holdsRouter);
 
   // Centralized Error Handling
   app.use(errorHandler);
