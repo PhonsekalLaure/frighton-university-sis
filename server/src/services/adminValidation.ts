@@ -8,7 +8,7 @@ export class AdminError extends Error {
 
 export const academicStatuses = ['active', 'probation', 'suspended', 'graduated', 'withdrawn'] as const;
 export const auditActions = ['student.account.created', 'student.profile.updated', 'student.access.deactivated',
-  'student.access.reactivated', 'student.password_recovery.requested'] as const;
+  'student.access.reactivated', 'student.password_recovery.requested', 'student.invitation.resent'] as const;
 export type AuditAction = typeof auditActions[number];
 export interface StudentInput {
   firstName?: string; middleName?: string | null; lastName?: string; email?: string;

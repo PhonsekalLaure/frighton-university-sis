@@ -22,10 +22,12 @@ const sqlFailure = { code: 'P0001', message: 'Internal database failure details'
 function fixture(options: { rpcError?: any; updateError?: boolean; rollbackError?: boolean; mailError?: boolean;
   duplicate?: boolean; cleanupError?: boolean; populated?: boolean; missingAuth?: boolean; lostReply?: boolean;
   unknownCommit?: boolean; inviteError?: boolean; missingStudent?: boolean; replyCode?: string;
-  retrySuccess?: boolean; committedReadError?: boolean; auditAvatarUrl?: string } = {}) {
+  retrySuccess?: boolean; committedReadError?: boolean; auditAvatarUrl?: string; unconfirmed?: boolean;
+  inactive?: boolean; noInvite?: boolean; wrongInviteIdentity?: boolean; mailUnknown?: boolean;
+  rateDenied?: boolean; rateUnavailable?: boolean } = {}) {
   const calls: Array<{ name: string; params?: any }> = [];
   let currentAuthEmail = profile.email;
-  let currentStudent: Record<string, any> = { ...profile };
+  let currentStudent: Record<string, any> = { ...profile, isActive: !options.inactive };
   let writeCalls = 0;
   let committed: any = null;
   const query = (table: string) => {
@@ -61,11 +63,14 @@ function fixture(options: { rpcError?: any; updateError?: boolean; rollbackError
     from: query,
     rpc: async (name: string, params: any) => {
       calls.push({ name, params });
+      if (name === 'sis_reserve_account_request') return { data: { allowed: !options.rateDenied, retryAfter: 60 },
+        error: options.rateUnavailable ? { code: '08006' } : null };
       if (name === 'admin_get_student' || name === 'admin_begin_student_change') return { data: { ...currentStudent },
         error: options.missingStudent ? { code: 'P0002' }
           : name === 'admin_get_student' && committed && options.committedReadError ? sqlFailure : null };
       if (name === 'admin_student_auth') return { data: options.missingAuth ? null : params.p_email === currentAuthEmail
-        ? { id: authId, invitedAt: '2026-01-01', emailConfirmedAt: '2026-01-02', lastSignInAt: '2026-10-01' } : null, error: null };
+        ? { id: authId, invitedAt: options.noInvite ? null : '2026-01-01',
+          emailConfirmedAt: options.unconfirmed ? null : '2026-01-02', lastSignInAt: '2026-10-01' } : null, error: null };
       if (name === 'admin_write_student') {
         writeCalls++;
         if (options.unknownCommit) return { data: null, error: writeCalls === 1 ? { message: 'Lost response' } : sqlFailure };
@@ -88,7 +93,7 @@ function fixture(options: { rpcError?: any; updateError?: boolean; rollbackError
         inviteUserByEmail: async (email: string, params: any) => {
           calls.push({ name: 'invite', params: { email, ...params } });
           if (options.inviteError) return { data: {}, error: { status: 500 } };
-          return { data: { user: { id: authId, email, user_metadata: params.data,
+          return { data: { user: { id: options.wrongInviteIdentity ? actor : authId, email, user_metadata: params.data,
             invited_at: new Date().toISOString(), created_at: new Date().toISOString() } }, error: null };
         },
         updateUserById: async (id: string, params: any) => {
@@ -101,7 +106,9 @@ function fixture(options: { rpcError?: any; updateError?: boolean; rollbackError
         deleteUser: async (id: string) => { calls.push({ name: 'auth.delete', params: id }); return { error: options.cleanupError ? {} : null }; },
       },
       resetPasswordForEmail: async (email: string, params: any) => {
-        calls.push({ name: 'recovery', params: { email, ...params } }); return { error: options.mailError ? {} : null };
+        calls.push({ name: 'recovery', params: { email, ...params } });
+        if (options.mailUnknown) throw new Error('Sensitive provider error must not escape');
+        return { error: options.mailError ? { status: 400 } : null };
       },
     },
   };
@@ -285,6 +292,58 @@ describe('Admin account lifecycle', () => {
     await assert.rejects(() => f.service.detail(actor, studentId), (e: any) => e.status === 404);
     assert.equal(f.calls.length, 1);
   });
+  test('resends a pending invitation without provisioning, metadata replacement, or deleting identities', async () => {
+    const f = fixture({ unconfirmed: true });
+    await f.service.resendInvitation(actor, studentId);
+    assert.equal(f.calls.filter(x => x.name === 'invite').length, 1);
+    assert.equal(f.calls.some(x => x.name === 'auth.delete' || x.name === 'auth.update'), false);
+    assert.equal(f.calls.find(x => x.name === 'invite')!.params.data, undefined);
+    assert.equal(f.calls.find(x => x.name === 'admin_write_student')!.params.p_action, 'student.invitation.resent');
+    assert.equal(f.writeCalls, 1);
+    assert.ok(f.calls.findIndex(x => x.name === 'sis_reserve_account_request') < f.calls.findIndex(x => x.name === 'invite'));
+  });
+  test('ineligible resends and unconfirmed recoveries never send mail', async () => {
+    for (const options of [{}, { unconfirmed: true, noInvite: true }, { unconfirmed: true, inactive: true }]) {
+      const f = fixture(options);
+      await assert.rejects(() => f.service.resendInvitation(actor, studentId), (e: any) => e.status === 409);
+      assert.equal(f.calls.some(x => x.name === 'invite'), false);
+      assert.equal(f.writeCalls, 0);
+    }
+    const pending = fixture({ unconfirmed: true });
+    await assert.rejects(() => pending.service.recovery(actor, studentId), (e: any) => e.code === 'invitation_pending');
+    assert.equal(pending.calls.some(x => x.name === 'recovery'), false);
+  });
+  test('resend identity mismatch requires review and never records success or cleans up an identity', async () => {
+    const f = fixture({ unconfirmed: true, wrongInviteIdentity: true });
+    await assert.rejects(() => f.service.resendInvitation(actor, studentId), (e: any) => e.status === 503);
+    assert.equal(f.writeCalls, 0);
+    assert.equal(f.calls.some(x => x.name === 'auth.delete' || x.name === 'admin_end_student_change'), false);
+  });
+  test('rate denial and rate service failure block all email providers', async () => {
+    for (const options of [{ rateDenied: true }, { rateUnavailable: true }]) {
+      for (const action of ['create', 'recovery', 'resend'] as const) {
+        const f = fixture({ ...options, missingAuth: action === 'create', unconfirmed: action === 'resend' });
+        await assert.rejects(() => action === 'create' ? f.service.create(actor, input)
+          : action === 'recovery' ? f.service.recovery(actor, studentId) : f.service.resendInvitation(actor, studentId),
+        (e: any) => e.status === (options.rateDenied ? 429 : 503));
+        assert.equal(f.calls.some(x => ['invite', 'recovery'].includes(x.name)), false);
+        assert.equal(f.writeCalls, 0);
+      }
+    }
+  });
+  test('unknown mail outcome retains lease, sends once, and records no success event', async () => {
+    const f = fixture({ mailUnknown: true });
+    await assert.rejects(() => f.service.recovery(actor, studentId), (e: any) => e.code === 'email_delivery_unknown');
+    assert.equal(f.calls.filter(x => x.name === 'recovery').length, 1);
+    assert.equal(f.calls.some(x => x.name === 'admin_end_student_change'), false);
+    assert.equal(f.writeCalls, 0);
+  });
+  test('lost resend audit response reconciles without a second email', async () => {
+    const f = fixture({ unconfirmed: true, lostReply: true });
+    await f.service.resendInvitation(actor, studentId);
+    assert.equal(f.calls.filter(x => x.name === 'invite').length, 1);
+    assert.equal(f.writeCalls, 2);
+  });
   test('student detail reuses domain services for empty and populated SIS records', async () => {
     for (const populated of [false, true]) {
       const f = fixture({ populated });
@@ -320,13 +379,13 @@ describe('Admin HTTP authorization and contracts', () => {
       for (const [method, path] of [['GET', '/dashboard'], ['GET', '/students'], ['POST', '/students'],
         ['GET', `/students/${studentId}`], ['PATCH', `/students/${studentId}`],
         ['POST', `/students/${studentId}/deactivate`], ['POST', `/students/${studentId}/reactivate`],
-        ['POST', `/students/${studentId}/password-recovery`], ['GET', '/audit-logs']]) {
+        ['POST', `/students/${studentId}/password-recovery`], ['POST', `/students/${studentId}/invitation-resend`], ['GET', '/audit-logs']]) {
         const response = await fetch(base + path, { method, headers: { origin: config.clientUrl } });
         assert.equal(response.status, 401, `${method} ${path}`);
       }
     } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
   });
-  test('all nine endpoints reject missing sessions/students; validation and mutation boundaries hold', async () => {
+  test('all admin endpoints reject missing sessions/students; validation and mutation boundaries hold', async () => {
     const f = fixture();
     const app = express();
     app.use(protectCookieRequests, express.json());
@@ -341,7 +400,7 @@ describe('Admin HTTP authorization and contracts', () => {
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/v1/admin`;
     const endpoints = [['GET', '/dashboard'], ['GET', '/students'], ['POST', '/students'], ['GET', `/students/${studentId}`],
       ['PATCH', `/students/${studentId}`], ['POST', `/students/${studentId}/deactivate`], ['POST', `/students/${studentId}/reactivate`],
-      ['POST', `/students/${studentId}/password-recovery`], ['GET', '/audit-logs']];
+      ['POST', `/students/${studentId}/password-recovery`], ['POST', `/students/${studentId}/invitation-resend`], ['GET', '/audit-logs']];
     const request = (path: string, method = 'GET', role?: string, body?: unknown, origin = config.clientUrl) => fetch(base + path, {
       method, headers: { origin, 'content-type': 'application/json', ...(role ? { 'x-test-role': role } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body),

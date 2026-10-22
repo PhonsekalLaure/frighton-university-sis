@@ -8,6 +8,7 @@ import { getGrades } from './gradesService.js';
 import { getBilling } from './billingService.js';
 import { getHolds } from './holdsService.js';
 import { AdminError, type AuditAction, type StudentInput } from './adminValidation.js';
+import { AccountError, reserveAccountRequest } from './accountRateLimit.js';
 
 type Row = Record<string, any>;
 type Client = Pick<SupabaseClient, 'rpc' | 'from' | 'auth'>;
@@ -152,6 +153,7 @@ export class AdminService {
   async create(actorId: string, input: StudentInput) {
     await this.checkDuplicates(input.email!, input.studentNumber);
     if (await this.authIdentity(actorId, input.email!)) throw new AdminError(409, 'An authentication account already uses this email.');
+    await reserveAccountRequest('admin_mail', input.email!, actorId, this.client);
     const operationId = randomUUID();
     const startedAt = Date.now();
     let user;
@@ -161,18 +163,28 @@ export class AdminService {
         data: { first_name: input.firstName, last_name: input.lastName, sis_provisioning_operation_id: operationId },
       });
       if (error || !data.user) {
-        throw new AdminError(['email_exists', 'user_already_exists', 'email_already_registered'].includes(error?.code ?? '') ? 409 : 503,
-          'Unable to invite the student. Check email availability and authentication service configuration.');
+        if (['email_exists', 'user_already_exists', 'email_already_registered'].includes(error?.code ?? '')) {
+          throw new AdminError(409, 'An authentication account already uses this email.');
+        }
+        if (error?.status === 429) throw new AccountError(429, 'rate_limited', 'The email service is busy. Try again later.', 60);
+        if (error?.status && error.status >= 400 && error.status < 500) {
+          throw new AccountError(503, 'email_rejected', 'Unable to invite the student. Check authentication email configuration.');
+        }
+        throw new Error('Uncertain invitation response');
       }
       user = data.user;
     } catch (error) {
-      if (error instanceof AdminError) throw error;
-      throw new AdminError(503, 'The invitation could not be confirmed. Check the account before retrying.');
+      if (error instanceof AdminError || error instanceof AccountError) throw error;
+      console.error('SIS invitation delivery requires review', { operationId });
+      throw new AccountError(503, 'email_delivery_unknown', 'The invitation could not be confirmed. Check the account before retrying.');
     }
     // Never compensate by deleting an identity whose ownership is uncertain.
     const ownsInvite = user.user_metadata?.sis_provisioning_operation_id === operationId &&
       Date.parse(user.created_at) >= startedAt - 1000 && Boolean(user.invited_at);
-    if (!ownsInvite) throw new AdminError(503, 'Invitation ownership could not be confirmed. Account provisioning requires review.');
+    if (!ownsInvite) {
+      console.error('SIS invitation ownership requires review', { operationId, authUserId: user.id });
+      throw new AccountError(503, 'identity_inconsistent', 'Invitation ownership could not be confirmed. Account provisioning requires review.');
+    }
     try {
       return { student: await this.write(actorId, user.id, operationId, 'student.account.created', input) };
     } catch (error) {
@@ -199,7 +211,9 @@ export class AdminService {
     });
     let changedAuth: Row | null = null;
     let release = true;
-    let recoverySent = false;
+    let emailSent = false;
+    let emailAttempted = false;
+    let emailRejected = false;
     try {
       if (action === 'student.profile.updated' && input.email && input.email !== before.email) {
         await this.checkDuplicates(input.email, undefined, studentId);
@@ -213,21 +227,52 @@ export class AdminService {
           throw new AdminError(error?.status === 422 ? 409 : 503, 'Unable to update the authentication email.');
         }
       }
-      if (action === 'student.password_recovery.requested') {
-        if (!await this.authIdentity(actorId, before.email)) throw new AdminError(503, 'The student has no matching authentication identity.');
-        const { error } = await this.client.auth.resetPasswordForEmail(before.email, {
-          redirectTo: new URL('/set-password', config.clientUrl).toString(),
-        });
-        if (error) throw new AdminError(503, 'Password recovery could not be sent. Please try again later.');
-        recoverySent = true;
+      if (action === 'student.password_recovery.requested' || action === 'student.invitation.resent') {
+        const resending = action === 'student.invitation.resent';
+        if (!before.isActive) throw new AccountError(409, 'inactive_student', 'Reactivate the student before requesting account emails.');
+        const auth = await this.authIdentity(actorId, before.email);
+        if (!auth) throw new AccountError(503, 'identity_inconsistent', 'The student has no matching authentication identity.');
+        if (resending && (!auth.invitedAt || auth.emailConfirmedAt)) {
+          throw new AccountError(409, 'invitation_not_pending', 'Only pending invitations can be resent. Use password recovery for confirmed accounts.');
+        }
+        if (!resending && !auth.emailConfirmedAt) {
+          throw new AccountError(409, 'invitation_pending', 'Resend the invitation for this unconfirmed account.');
+        }
+        await reserveAccountRequest('admin_mail', before.email, actorId, this.client);
+        emailAttempted = true;
+        const redirectTo = new URL('/set-password', config.clientUrl).toString();
+        const response: { data?: { user?: { id: string } | null } | null; error: { status?: number } | null } = resending
+          ? await this.client.auth.admin.inviteUserByEmail(before.email, { redirectTo })
+          : await this.client.auth.resetPasswordForEmail(before.email, { redirectTo });
+        if (response.error) {
+          emailRejected = Boolean(response.error.status && response.error.status >= 400 && response.error.status < 500);
+          if (response.error.status === 429) throw new AccountError(429, 'rate_limited', 'The email service is busy. Try again later.', 60);
+          throw new AccountError(503, emailRejected ? 'email_rejected' : 'email_delivery_unknown',
+            emailRejected ? 'Account instructions could not be sent. Please try again later.'
+              : 'Email delivery could not be confirmed. Review the account before retrying.');
+        }
+        emailSent = true;
+        if (resending) {
+          const returned = response.data?.user;
+          if (returned?.id !== auth.id) {
+            release = false;
+            throw new AccountError(503, 'identity_inconsistent', 'Invitation identity did not match. Administrator review is required.');
+          }
+        }
       }
       const student = await this.write(actorId, studentId, operationId, action, input);
       return { student };
     } catch (error) {
-      if (recoverySent) console.error('SIS recovery email submitted but audit outcome requires review', { operationId, studentId });
+      if (emailSent) console.error('SIS account email submitted but audit outcome requires review', { operationId, studentId });
+      if (emailAttempted && !emailSent && !emailRejected) {
+        release = false;
+        console.error('SIS account email delivery requires review', { operationId, studentId });
+        throw new AccountError(503, 'email_delivery_unknown', 'Email delivery could not be confirmed. Review the account before retrying.');
+      }
       if (error instanceof AdminError && error.outcomeUnknown) {
         release = false;
         console.error('SIS account change outcome requires review', { operationId, studentId });
+        if (emailSent) throw new AccountError(503, 'email_audit_incomplete', 'Account email was requested, but its audit outcome is unknown. Review the account before retrying.');
         throw new AdminError(503, 'The account change outcome could not be confirmed. Review the account before retrying.');
       }
       if (changedAuth) {
@@ -240,7 +285,9 @@ export class AdminService {
           throw new AdminError(503, 'Email synchronization failed and requires administrator review.');
         }
       }
-      if (recoverySent) throw new AdminError(503, 'Recovery email was requested, but audit recording failed. Review the account before retrying.');
+      if (emailSent && error instanceof AccountError && error.code === 'identity_inconsistent') throw error;
+      if (emailSent) throw new AccountError(503, 'email_audit_incomplete', 'Account email was requested, but audit recording failed. Review the account before retrying.');
+      if (error instanceof AccountError) throw error;
       if (error instanceof AdminError) throw error;
       throw new AdminError(503, 'The account change could not be completed. Please try again.');
     } finally {
@@ -259,5 +306,9 @@ export class AdminService {
   async recovery(actorId: string, studentId: string) {
     await this.change(actorId, studentId, 'student.password_recovery.requested');
     return { message: 'Password recovery instructions requested.' };
+  }
+  async resendInvitation(actorId: string, studentId: string) {
+    await this.change(actorId, studentId, 'student.invitation.resent');
+    return { message: 'Invitation instructions requested.' };
   }
 }

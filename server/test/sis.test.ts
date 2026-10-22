@@ -360,7 +360,7 @@ describe('SIS Backend Foundation & Security Verification', () => {
     assert.deepEqual(grades.terms.map((term) => term.code), ['FALL-2026', 'SPRING-2026', 'FALL-2025']);
     assert.equal(grades.terms[0].gpa, null);
     assert.equal(grades.terms[0].courses[0].gradeStatus, 'in_progress');
-    assert.equal(grades.terms[1].courses.find((course) => course.id === 'withdrawn')?.gradeStatus, 'withdrawn');
+    assert.equal(grades.terms[1].courses.find((course: { id: string }) => course.id === 'withdrawn')?.gradeStatus, 'withdrawn');
   });
 
   test('15. Billing requires an authenticated SIS session', async () => {

@@ -10,6 +10,7 @@ import { gradesRouter } from './routes/gradesRoutes.js';
 import { scheduleRouter } from './routes/scheduleRoutes.js';
 import { holdsRouter } from './routes/holdsRoutes.js';
 import { createAdminRouter } from './routes/adminRoutes.js';
+import { createPasswordRouter } from './routes/passwordRoutes.js';
 import { protectCookieRequests } from './middlewares/auth.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 
@@ -36,6 +37,7 @@ export const createApp = (): Express => {
   // API Routes
   app.use('/api/health', healthRouter);
   app.use('/api/auth', authRouter);
+  app.use('/api/auth/password', createPasswordRouter());
   app.use('/api/v1/integration', integrationRouter);
   app.use('/api/v1/dashboard', dashboardRouter);
   app.use('/api/v1/billing', billingRouter);

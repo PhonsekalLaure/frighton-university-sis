@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthError } from '../services/authService.js';
 import { HoldsError } from '../services/holdsService.js';
+import { AccountError } from '../services/accountRateLimit.js';
 
 export const errorHandler = (
   err: Error & { status?: number },
@@ -8,11 +9,12 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ): void => {
-  if (err instanceof AuthError || err instanceof HoldsError) {
-    res.status(err.status).json({ error: err.message });
+  if (err instanceof AccountError) {
+    if (err.retryAfter) res.set('Retry-After', String(err.retryAfter));
+    res.status(err.status).json({ error: err.message, code: err.code });
     return;
   }
-  if (err.status && err.status >= 400 && err.status < 600) {
+  if (err instanceof AuthError || err instanceof HoldsError) {
     res.status(err.status).json({ error: err.message });
     return;
   }
@@ -22,6 +24,10 @@ export const errorHandler = (
   }
   if (err instanceof SyntaxError && err.status === 400) {
     res.status(400).json({ error: 'Request body must contain valid JSON.' });
+    return;
+  }
+  if (err.status && err.status >= 400 && err.status < 600) {
+    res.status(err.status).json({ error: err.message });
     return;
   }
   // Keep configuration details out of the browser response, but make local

@@ -24,6 +24,9 @@ export function createAdminRouter(service: AdminService = new AdminService(), au
   router.post('/students/:studentId/password-recovery', handle((req, actor) => {
     emptyBody(req.body); return service.recovery(actor, uuid(req.params.studentId));
   }, 202));
+  router.post('/students/:studentId/invitation-resend', handle((req, actor) => {
+    emptyBody(req.body); return service.resendInvitation(actor, uuid(req.params.studentId));
+  }, 202));
   router.get('/audit-logs', handle(req => service.auditLogs(filters(req.query, true))));
   return router;
 }

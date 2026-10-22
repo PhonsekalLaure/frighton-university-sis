@@ -9,6 +9,8 @@
     "start": "node dist/server.js",
     "test": "tsx --test test/*.test.ts",
     "test:admin-db": "tsx src/scripts/verifyAdminDatabase.ts",
+    "admin:diagnose": "tsx src/scripts/diagnoseAdminAccount.ts",
+    "admin:auth-check": "tsx src/scripts/checkAdminAuth.ts",
     "seed:students": "tsx src/scripts/seed.ts",
     "seed": "tsx src/scripts/seed.ts",
     "setup:sis": "tsx src/scripts/setup.ts",

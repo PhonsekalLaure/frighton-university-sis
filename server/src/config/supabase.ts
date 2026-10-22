@@ -4,6 +4,9 @@ import { config } from './env.js';
 let supabaseAdminClient: SupabaseClient | null = null;
 let adminPortalClient: SupabaseClient | null = null;
 const authOptions = { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false };
+const boundedFetch: typeof fetch = (url, options) => fetch(url, { ...options,
+  signal: AbortSignal.any([AbortSignal.timeout(15000), ...(options?.signal ? [options.signal] : [])]),
+});
 
 function requireConfig(key: string): void {
   if (!config.supabase.url || !key || config.supabase.url.includes('your-project-id')) {
@@ -14,7 +17,7 @@ function requireConfig(key: string): void {
 // Each login and refresh gets an isolated client so sessions cannot mix.
 export const createSupabaseAuthClient = (): SupabaseClient => {
   requireConfig(config.supabase.anonKey);
-  return createClient(config.supabase.url, config.supabase.anonKey, { auth: authOptions });
+  return createClient(config.supabase.url, config.supabase.anonKey, { auth: authOptions, global: { fetch: boundedFetch } });
 };
 
 export const getSupabaseAdmin = (): SupabaseClient => {
@@ -33,9 +36,7 @@ export const getAdminPortalClient = (): SupabaseClient => {
     requireConfig(config.supabase.serviceRoleKey);
     adminPortalClient = createClient(config.supabase.url, config.supabase.serviceRoleKey, {
       auth: authOptions,
-      global: { fetch: (url, options) => fetch(url, { ...options,
-        signal: AbortSignal.any([AbortSignal.timeout(15000), ...(options?.signal ? [options.signal] : [])]),
-      }) },
+      global: { fetch: boundedFetch },
     });
   }
   return adminPortalClient;

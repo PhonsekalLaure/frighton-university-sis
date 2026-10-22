@@ -3,15 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { config } from '../config/env.js';
-import { assertSISLMSProject } from './projectGuard.js';
+import { assertLinkedAdminProject } from './adminProjectGuard.js';
 
 // Generates only a temporary SQL artifact. Every synthetic record is rolled back.
-assertSISLMSProject();
-const expectedRef = 'pbkvjzclnwpucrhufyvr';
-if (new URL(config.supabase.url).hostname !== `${expectedRef}.supabase.co`) throw new Error('Unexpected SIS project.');
+assertLinkedAdminProject();
 const root = fileURLToPath(new URL('../../../', import.meta.url));
-if (readFileSync(join(root, 'supabase/.temp/project-ref'), 'utf8').trim() !== expectedRef) throw new Error('Unexpected CLI link.');
 const args = process.argv.slice(2);
 if (args.length && (args[0] !== '--preview-migration' || args.length < 2)) {
   throw new Error('Usage: test:admin-db [--preview-migration <pending-filename.sql> ...]');

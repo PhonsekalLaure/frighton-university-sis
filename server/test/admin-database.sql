@@ -190,4 +190,81 @@ SELECT set_config('request.jwt.claims',jsonb_build_object('email',current_settin
 SET LOCAL ROLE authenticated;
 DO $rls_inactive$ BEGIN ASSERT (SELECT count(*) FROM public.admin_audit_logs)=0,'Inactive admins cannot read audit'; END; $rls_inactive$;
 RESET ROLE;
+-- Lifecycle regression tests use only synthetic data and remain in the same rollback.
+DO $lifecycle$
+DECLARE actor uuid := current_setting('sis.test_actor_id')::uuid;
+  student uuid := current_setting('sis.test_student_id')::uuid;
+  op uuid := gen_random_uuid(); orphan uuid := gen_random_uuid(); orphan_op uuid := gen_random_uuid();
+  key1 text := encode(sha256(convert_to(gen_random_uuid()::text,'UTF8')),'hex');
+  key2 text := encode(sha256(convert_to(gen_random_uuid()::text,'UTF8')),'hex');
+  result jsonb; baseline integer; i integer;
+BEGIN
+  UPDATE public.users SET is_active=true WHERE users_id=actor;
+  SELECT count(*) INTO baseline FROM public.admin_audit_logs;
+  PERFORM public.admin_begin_student_change(actor,student,op);
+  PERFORM public.admin_write_student(actor,student,op,'student.invitation.resent','{}');
+  PERFORM public.admin_write_student(actor,student,op,'student.invitation.resent','{}');
+  ASSERT (SELECT count(*) FROM public.admin_audit_logs)=baseline+1,'Exactly one resend event, including replay';
+  ASSERT (SELECT action='student.invitation.resent' AND changes='{}'::jsonb FROM public.admin_audit_logs WHERE id=op),'Resend has no secret payload';
+
+  result := public.sis_reserve_account_request('admin_mail',key1,actor);
+  ASSERT (result->>'allowed')::boolean,'First mail reservation';
+  result := public.sis_reserve_account_request('admin_mail',key1,actor);
+  ASSERT NOT (result->>'allowed')::boolean AND (result->>'retryAfter')::integer BETWEEN 1 AND 60,'Recipient cooldown';
+  ASSERT (SELECT attempts=1 FROM private.sis_account_request_limits WHERE bucket='mail_actor' AND
+    key_hash=encode(sha256(convert_to(actor::text,'UTF8')),'hex')),'Denied reservation consumes no actor allowance';
+  FOR i IN 2..5 LOOP
+    UPDATE private.sis_account_request_limits SET expires_at=clock_timestamp()-interval '1 second' WHERE bucket='mail_minute' AND key_hash=key1;
+    ASSERT (public.sis_reserve_account_request('admin_mail',key1,actor)->>'allowed')::boolean,'Five sends per hour';
+  END LOOP;
+  UPDATE private.sis_account_request_limits SET expires_at=clock_timestamp()-interval '1 second' WHERE bucket='mail_minute' AND key_hash=key1;
+  result := public.sis_reserve_account_request('admin_mail',key1,actor);
+  ASSERT NOT (result->>'allowed')::boolean AND (result->>'retryAfter')::integer>60,'Recipient hourly limit';
+  UPDATE private.sis_account_request_limits SET attempts=20 WHERE bucket='mail_actor' AND key_hash=encode(sha256(convert_to(actor::text,'UTF8')),'hex');
+  ASSERT NOT (public.sis_reserve_account_request('admin_mail',key2,actor)->>'allowed')::boolean,'Actor limit spans recipients';
+  ASSERT NOT EXISTS(SELECT 1 FROM private.sis_account_request_limits WHERE key_hash=key2),'Denied multi-bucket reservation is atomic';
+  FOR i IN 1..20 LOOP
+    ASSERT (public.sis_reserve_account_request('password_complete',key2)->>'allowed')::boolean,'Twenty password attempts';
+  END LOOP;
+  ASSERT NOT (public.sis_reserve_account_request('password_complete',key2)->>'allowed')::boolean,'Password IP limit';
+  UPDATE private.sis_account_request_limits SET expires_at=clock_timestamp()-interval '1 second' WHERE key_hash=key2;
+  ASSERT (public.sis_reserve_account_request('password_complete',key2)->>'allowed')::boolean,'Expired window resets';
+  ASSERT (SELECT attempts=1 FROM private.sis_account_request_limits WHERE key_hash=key2),'Expired counter cleaned/reset';
+  BEGIN
+    PERFORM public.sis_reserve_account_request('admin_mail',key1,student);
+    RAISE EXCEPTION 'Expected inactive/nonadmin actor rejection';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN
+    PERFORM public.sis_reserve_account_request('password_complete','raw-email@example.invalid');
+    RAISE EXCEPTION 'Expected raw key rejection';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+
+  result := public.sis_account_diagnostics(student,NULL);
+  ASSERT result->'directory'->>'id'=student::text AND result->'profile'->>'role'='student','Read-only linked account diagnosis';
+  ASSERT result::text NOT LIKE '%'||current_setting('sis.test_student_email')||'%','Diagnostics masks email addresses';
+  ASSERT jsonb_array_length(result->'authCandidates')=1,'Auth lookup does not assume directory/Auth UUIDs';
+  ASSERT result->'directoryProfileEmailsMatch'='true'::jsonb,'Email consistency';
+  INSERT INTO auth.users(id,email,invited_at,created_at,raw_user_meta_data) VALUES(orphan,
+    'orphan-'||orphan||'@example.invalid',now(),now(),jsonb_build_object('sis_provisioning_operation_id',orphan_op));
+  result := public.sis_account_diagnostics(NULL,orphan_op);
+  ASSERT result->'directory'='null'::jsonb AND result->'profile'='null'::jsonb,'Orphan provisioning does not invent records';
+  ASSERT result->'authCandidates'->0->>'id'=orphan::text,'Provisioning operation finds orphan Auth identity';
+  ASSERT result->'authCandidates'->0->'hasPassword'='false'::jsonb,'Only password existence is exposed';
+  ASSERT result::text NOT LIKE '%encrypted_password%' AND result::text NOT LIKE '%raw_user_meta_data%','No raw Auth data';
+  result := public.sis_account_diagnostics(gen_random_uuid(),NULL);
+  ASSERT result->'authCandidates'='[]'::jsonb AND result->'auditEvidence'='[]'::jsonb,'Unknown account empty diagnostics';
+  ASSERT (SELECT count(*) FROM public.admin_audit_logs)=baseline+1,'Limits and diagnostics produce no account audit events';
+
+  ASSERT NOT has_table_privilege('authenticated','private.sis_account_request_limits','SELECT,INSERT,UPDATE,DELETE'), 'Browser has no counter access';
+  ASSERT NOT has_table_privilege('service_role','private.sis_account_request_limits','SELECT,INSERT,UPDATE,DELETE'), 'Counters only via RPC';
+  ASSERT (SELECT relrowsecurity FROM pg_class WHERE oid='private.sis_account_request_limits'::regclass),'Counter RLS enabled';
+  ASSERT to_regclass('private.sis_account_request_limits_expiry') IS NOT NULL,'Expiry index installed';
+  ASSERT NOT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE n.nspname='public' AND p.proname IN ('sis_reserve_account_request','sis_account_diagnostics') AND
+    (has_function_privilege('anon',p.oid,'EXECUTE') OR has_function_privilege('authenticated',p.oid,'EXECUTE'))),'Lifecycle RPCs service-only';
+  ASSERT has_function_privilege('service_role','public.sis_reserve_account_request(text,text,uuid)','EXECUTE') AND
+    has_function_privilege('service_role','public.sis_account_diagnostics(uuid,uuid)','EXECUTE'),'Service RPC grants';
+  ASSERT (SELECT provolatile='s' FROM pg_proc WHERE oid='public.sis_account_diagnostics(uuid,uuid)'::regprocedure),'Diagnostics declared read-only';
+END;
+$lifecycle$;
 SELECT 'Admin SQL regression assertions passed; transaction must be rolled back.' AS result;
