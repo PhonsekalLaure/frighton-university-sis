@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '../config/supabase.js';
+import { admins } from '../seed-data/admins.js';
 import { academicRecords } from '../seed-data/academicRecords.js';
 import { courses } from '../seed-data/courses.js';
 import { holds } from '../seed-data/holds.js';
@@ -10,6 +11,7 @@ import { terms } from '../seed-data/terms.js';
 import { assertSISLMSProject } from './projectGuard.js';
 
 const DEFAULT_STUDENT_PASSWORD = 'Student2026!';
+const DEFAULT_ADMIN_PASSWORD = 'AdminPortal2026!';
 
 function failOnError(error: { message: string } | null, operation: string): void {
   if (error) throw new Error(`${operation}: ${error.message}`);
@@ -63,6 +65,55 @@ export async function seedDatabase(): Promise<void> {
   failOnError(sectionsError, 'Upserting course sections');
 
   const studentIds = new Map<string, string>();
+
+  for (const admin of admins) {
+    const { data: existingDirectoryUser, error: directoryReadError } = await supabase
+      .from('users').select('users_id').eq('email', admin.email).maybeSingle();
+    failOnError(directoryReadError, `Reading directory user ${admin.email}`);
+
+    let authUser;
+    if (existingDirectoryUser) {
+      const { data: existingAuth, error: existingAuthError } = await supabase.auth.admin.getUserById(
+        existingDirectoryUser.users_id
+      );
+      failOnError(existingAuthError, `Reading Auth user ${admin.email}`);
+      if (!existingAuth.user) throw new Error(`Directory user ${admin.email} has no matching Auth user.`);
+
+      const { data, error } = await supabase.auth.admin.updateUserById(existingAuth.user.id, {
+        password: DEFAULT_ADMIN_PASSWORD,
+        email_confirm: true,
+        user_metadata: { first_name: admin.firstName, last_name: admin.lastName },
+      });
+      failOnError(error, `Updating Auth user ${admin.email}`);
+      if (!data.user) throw new Error(`Updating Auth user ${admin.email} returned no user.`);
+      authUser = data.user;
+    } else {
+      const { data, error } = await supabase.auth.admin.createUser({
+        email: admin.email,
+        password: DEFAULT_ADMIN_PASSWORD,
+        email_confirm: true,
+        user_metadata: { first_name: admin.firstName, last_name: admin.lastName },
+      });
+      failOnError(error, `Creating Auth user ${admin.email}`);
+      if (!data.user) throw new Error(`Creating Auth user ${admin.email} returned no user.`);
+      authUser = data.user;
+    }
+    if (!authUser) throw new Error(`No Auth user returned for ${admin.email}.`);
+
+    const { error: userError } = await supabase.from('users').upsert({
+      users_id: authUser.id, first_name: admin.firstName, middle_name: admin.middleName ?? null,
+      last_name: admin.lastName, email: admin.email, password: '[MANAGED_BY_SUPABASE_AUTH]',
+      role: 'Admin', is_active: true,
+    }, { onConflict: 'users_id' });
+    failOnError(userError, `Upserting directory user ${admin.email}`);
+
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      id: authUser.id, student_number: admin.adminNumber, first_name: admin.firstName,
+      last_name: admin.lastName, email: admin.email, role: 'admin', academic_status: 'active',
+      department: admin.department, program: null, year_level: null, avatar_url: null,
+    }, { onConflict: 'id' });
+    failOnError(profileError, `Upserting profile ${admin.email}`);
+  }
 
   for (const student of students) {
     const { data: existingDirectoryUser, error: directoryReadError } = await supabase
@@ -173,7 +224,9 @@ export async function seedDatabase(): Promise<void> {
     }
   }
 
-  console.log(`Seeded ${students.length} student accounts, ${terms.length} terms, ${courses.length} courses, and ${sections.length} sections.`);
+  console.log(`Seeded ${admins.length} admin accounts, ${students.length} student accounts, ${terms.length} terms, ${courses.length} courses, and ${sections.length} sections.`);
+  console.log(`Seeded admin emails: ${admins.map((admin) => admin.email).join(', ')}.`);
+  console.log(`All seeded admin passwords are ${DEFAULT_ADMIN_PASSWORD}.`);
   console.log(`All seeded student passwords are ${DEFAULT_STUDENT_PASSWORD}.`);
 }
 
