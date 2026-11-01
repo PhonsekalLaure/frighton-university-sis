@@ -53,7 +53,19 @@ npm run seed
 ```
 
 The command refuses to run when the configured `SUPABASE_URL` does not match
-that ref, provisions ten student Auth accounts, and upserts the related SIS data.
+that ref, provisions three admin and ten student Auth accounts, and upserts the related SIS data.
+Admins are stored in the shared `public.users` directory with `role = 'Admin'`;
+only students receive `public.profiles` and academic/billing records. Both SIS
+and LMS accept the same active admin account and Supabase Auth credentials,
+regardless of which application provisioned it. An SIS profile is not required
+for admin access. Each application maintains its own browser session.
+
+For databases seeded before this correction, apply
+`20261101000000_shared_admin_directory.sql` to switch SIS permissions to the
+shared directory and remove obsolete admin profiles. It refuses cleanup if an
+admin profile has student academic, billing, or hold records. It preserves
+shared users, Auth accounts, credentials, and student data. Re-running the
+full seed is unnecessary for this cleanup and resets seeded passwords.
 
 To clear SIS-managed records before a fresh seed, run:
 

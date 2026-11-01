@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '../config/supabase.js';
 import { admins } from '../seed-data/admins.js';
 import { academicRecords } from '../seed-data/academicRecords.js';
@@ -19,9 +20,9 @@ function failOnError(error: { message: string } | null, operation: string): void
 
 const makeKey = (...parts: string[]) => parts.join('::');
 
-export async function seedDatabase(): Promise<void> {
+export async function seedDatabase(client?: SupabaseClient): Promise<void> {
   assertSISLMSProject();
-  const supabase = getSupabaseAdmin();
+  const supabase = client ?? getSupabaseAdmin();
 
   const { error: termsError } = await supabase.from('academic_terms').upsert(
     terms.map((term) => ({
@@ -107,12 +108,8 @@ export async function seedDatabase(): Promise<void> {
     }, { onConflict: 'users_id' });
     failOnError(userError, `Upserting directory user ${admin.email}`);
 
-    const { error: profileError } = await supabase.from('profiles').upsert({
-      id: authUser.id, student_number: admin.adminNumber, first_name: admin.firstName,
-      last_name: admin.lastName, email: admin.email, role: 'admin', academic_status: 'active',
-      department: admin.department, program: null, year_level: null, avatar_url: null,
-    }, { onConflict: 'id' });
-    failOnError(profileError, `Upserting profile ${admin.email}`);
+    // Admin access is shared by SIS and LMS through users.role. Profiles hold
+    // student academic data only; an administrator needs no student profile.
   }
 
   for (const student of students) {

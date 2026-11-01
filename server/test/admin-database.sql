@@ -14,6 +14,12 @@ BEGIN
   number1 := 'STU-9999-'||floor(random()*1000000000000)::text;
   INSERT INTO public.users(users_id,first_name,last_name,email,password,role,is_active)
     VALUES(actor,'Test','Administrator',actor_email,'[MANAGED_BY_SUPABASE_AUTH]','Admin',true);
+  ASSERT NOT EXISTS(SELECT 1 FROM public.profiles WHERE id=actor),'Shared admin has no student profile';
+  BEGIN
+    INSERT INTO public.profiles(id,student_number,first_name,last_name,email,role)
+      VALUES(actor,'ADM-test-'||actor,'Test','Administrator',actor_email,'admin');
+    RAISE EXCEPTION 'Expected admin student-profile rejection';
+  EXCEPTION WHEN check_violation THEN NULL; END;
   before_dashboard := public.admin_dashboard(actor);
   SELECT count(*) INTO baseline_logs FROM public.admin_audit_logs;
   INSERT INTO auth.users(id,email,invited_at,created_at) VALUES(student,email1,now(),now()),(student2,email2,now(),now());
@@ -179,16 +185,32 @@ RESET ROLE;
 -- Exercise RLS as actual browser roles, including inactive directory admins.
 SELECT set_config('request.jwt.claims',jsonb_build_object('email',current_setting('sis.test_actor_email'),'role','authenticated')::text,true);
 SET LOCAL ROLE authenticated;
-DO $rls_admin$ BEGIN ASSERT (SELECT count(*) FROM public.admin_audit_logs)>0,'Active admin can read audit'; END; $rls_admin$;
+DO $rls_admin$
+BEGIN
+  ASSERT private.is_sis_admin(),'Shared directory admin needs no SIS student profile';
+  ASSERT (SELECT count(*) FROM public.profiles)>0,'Directory admin can read SIS student profiles';
+  ASSERT (SELECT count(*) FROM public.admin_audit_logs)>0,'Active admin can read audit';
+END;
+$rls_admin$;
 RESET ROLE;
 SELECT set_config('request.jwt.claims',jsonb_build_object('email',current_setting('sis.test_student_email'),'role','authenticated')::text,true);
 SET LOCAL ROLE authenticated;
-DO $rls_student$ BEGIN ASSERT (SELECT count(*) FROM public.admin_audit_logs)=0,'Students cannot read audit'; END; $rls_student$;
+DO $rls_student$
+BEGIN
+  ASSERT NOT private.is_sis_admin(),'Student directory role does not grant admin permissions';
+  ASSERT (SELECT count(*) FROM public.admin_audit_logs)=0,'Students cannot read audit';
+END;
+$rls_student$;
 RESET ROLE;
 UPDATE public.users SET is_active=false WHERE users_id=current_setting('sis.test_actor_id')::uuid;
 SELECT set_config('request.jwt.claims',jsonb_build_object('email',current_setting('sis.test_actor_email'),'role','authenticated')::text,true);
 SET LOCAL ROLE authenticated;
-DO $rls_inactive$ BEGIN ASSERT (SELECT count(*) FROM public.admin_audit_logs)=0,'Inactive admins cannot read audit'; END; $rls_inactive$;
+DO $rls_inactive$
+BEGIN
+  ASSERT NOT private.is_sis_admin(),'Inactive directory admins lose SIS permissions';
+  ASSERT (SELECT count(*) FROM public.admin_audit_logs)=0,'Inactive admins cannot read audit';
+END;
+$rls_inactive$;
 RESET ROLE;
 -- Lifecycle regression tests use only synthetic data and remain in the same rollback.
 DO $lifecycle$

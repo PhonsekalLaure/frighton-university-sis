@@ -136,13 +136,16 @@ describe('SIS Backend Foundation & Security Verification', () => {
     let mockAccount: any = null;
 
     const mockAdminClient = {
-      from: () => ({
-        select: () => ({
-          ilike: () => ({
-            maybeSingle: async () => ({ data: mockAccount, error: null }),
+      from: (table: string) => {
+        assert.equal(table, 'users', 'SIS admin access must not require a student profile');
+        return {
+          select: () => ({
+            ilike: () => ({
+              maybeSingle: async () => ({ data: mockAccount, error: null }),
+            }),
           }),
-        }),
-      }),
+        };
+      },
     } as unknown as SupabaseClient;
 
     const mockUser = { id: 'auth-user-1', email: 'user@frighton.edu', email_confirmed_at: '2026-10-20T00:00:00.000Z' } as any;
@@ -169,7 +172,7 @@ describe('SIS Backend Foundation & Security Verification', () => {
       middle_name: 'L.',
       last_name: 'Admin',
       email: 'admin@frighton.edu',
-      role: 'admin',
+      role: 'Admin',
       is_active: true,
     };
     const adminUser = await findUser(mockUser, mockAdminClient);
