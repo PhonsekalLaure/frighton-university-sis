@@ -68,7 +68,7 @@ describe('AdminHandoffPage', () => {
   test('keeps an administrator out of the student shell and permits sign out', () => {
     const onLogout = vi.fn();
 
-    render(<AdminHandoffPage user={{ email: 'admin@frighton.edu', fullName: 'Ada Admin', role: 'admin' }} onLogout={onLogout} />);
+    render(<AdminHandoffPage user={{ id: 'admin-test', email: 'admin@frighton.edu', fullName: 'Ada Admin', role: 'admin' }} onLogout={onLogout} />);
 
     expect(screen.getByText('Welcome, Ada Admin.')).toBeInTheDocument();
     expect(screen.getByText(/Student self-service pages are intentionally unavailable/)).toBeInTheDocument();

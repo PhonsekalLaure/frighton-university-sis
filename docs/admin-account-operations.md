@@ -1,6 +1,14 @@
 # Admin account operations
 
-This is a backend-only milestone. No automated test sends email, and no diagnostic/configuration command below repairs accounts or changes Supabase Auth settings. The administrator handoff frontend is unchanged.
+The standalone student portal, administrator console, and password-completion page are implemented locally. No automated test sends email, and no diagnostic/configuration command below repairs accounts or changes Supabase Auth settings. Local completion does not certify live email delivery or a deployed origin.
+
+## Local acceptance and the separate live gate
+
+Run client/server tests, both builds, client lint, and the rollback-only SQL regression checks before a demo. Client fixtures exercise account creation, nullable edits, cooldowns, uncertain outcomes, full read-only student records, and password completion without real mail requests. Browser smoke checks must use isolated fixtures when exercising account controls; do not create live students or request live emails for routine UI verification.
+
+The password route captures and scrubs its link before React starts, uses a frontend `no-referrer` policy, consumes the link only on explicit submission, and clears in-memory link/password state on completion or exit. There is no analytics or session recording on this flow. Keep proxy/error-monitoring URL and body redaction in any future deployment configuration.
+
+Before live email launch, obtain approval for the exact deployed SIS origin, exact `/set-password` redirect allowlist addition, shared invitation/recovery template diff, and dedicated disposable mailbox/student identity. Deploy and smoke-test the frontend first; preserve existing LMS redirect entries and full non-SIS template fallback bodies. Use the opt-in mailbox checklist below. No SMTP provider, production origin, Auth-setting mutation, email send, or account cleanup is authorized merely by running local tests.
 
 ## Verification commands
 
@@ -26,7 +34,7 @@ The database test uses synthetic records inside `BEGIN ... ROLLBACK`; it is not 
 
 The template draft command does not fetch or apply settings. It emits wrappers containing explicit `__EXISTING_*_TEMPLATE_BODY__` placeholders. At deployment, use the **complete current** invitation/recovery body as each fallback; do not deploy the literal placeholders. `buildSISPasswordTemplate` preserves that body byte-for-byte in its `else` branch. Match the exact `CLIENT_URL`-derived `/set-password` redirect, not a wildcard, user metadata, or a caller-provided URL. Existing LMS/non-SIS links must continue using their original template bodies. Do not change the shared Site URL, other templates, SMTP credentials, or password policy as a side effect.
 
-For the matching SIS redirect, links contain `token_hash={{ .TokenHash }}` and the fixed `invite`/`recovery` type. The future page must only consume the token on explicit password submission; remove it from browser history promptly, use `Referrer-Policy: no-referrer`, and disable analytics, session recording, and request-body/URL logging on this flow. The API never returns Auth access/refresh tokens. Configure error tracking and reverse proxies to redact these values as well.
+For the matching SIS redirect, links contain `token_hash={{ .TokenHash }}` and the fixed `invite`/`recovery` type. The implemented page consumes the token only on explicit password submission and removes sensitive query/fragment data before React starts. The frontend HTML includes `no-referrer`; deployments should also supply the `Referrer-Policy: no-referrer` header. Keep analytics/session recording disabled and configure reverse proxies and error tracking to redact these values. The API never returns Auth access/refresh tokens.
 
 Do **not** activate these templates until the deployed frontend supports this contract. Review an exact before/after diff of the shared configuration, obtain deployment approval, add the exact SIS redirect allowlist entry without removing LMS entries, and preserve a protected rollback copy of the old bodies outside Git. Rollback restores the previous templates, not audit history or user identities. Backend/schema can deploy first; email-flow launch stays gated on the password page and an approved mailbox test.
 

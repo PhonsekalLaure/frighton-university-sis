@@ -1,8 +1,10 @@
 # Frighton SIS: Admin Frontend Handoff
 
 **Audience:** Frontend engineer and QA  
-**Contract reviewed:** October 22, 2026, against the current repository implementation  
-**Goal:** Replace the administrator handoff screen with a separate admin console using the existing SIS backend. Also implement the public student invitation/password-recovery completion page.
+**Contract reviewed:** November 1, 2026, against the current repository implementation
+**Status:** The standalone administrator console and public student invitation/password-recovery page are implemented locally. Live Auth configuration and mailbox delivery remain a separate release gate.
+
+Current implementation includes URL-based navigation, coalesced refresh for safe reads, student/account forms with nullable edits and changed-field PATCHes, explicit shared-email confirmation, per-student action serialization, server cooldown feedback, and review-first handling of uncertain outcomes. Detail has Overview/Schedule/Grades/Holds/Billing tabs backed solely by the selected student's aggregate. Audit filters and pagination use the URL and discard stale reads. The acceptance checklist below remains a regression checklist for future changes; it is not a record of live email acceptance.
 
 ## 1. Deliverables and boundaries
 
@@ -29,12 +31,12 @@ The client uses React, TypeScript, Vite, existing CSS, and `lucide-react`. Reuse
 Relevant starting points:
 
 - `client/src/App.tsx`: session restoration, role branching, and current student routing.
-- `client/src/pages/AdminHandoffPage.tsx`: placeholder to replace with the protected admin shell.
+- `client/src/pages/AdminConsolePage.tsx` and `client/src/components/admin/`: the protected admin shell, directory, forms, full record detail, and audit views.
 - `client/src/lib/api.ts`: existing credentialed GET/POST helpers.
 - `client/src/types/dashboard.ts`: existing `SignedInUser`, dashboard, schedule, grades, holds, and billing types.
 - `client/src/components/PageStates.tsx`: shared loading/error/heading components.
 
-The existing domain page components fetch their own student-only `/me` endpoints. **Do not mount them unchanged inside admin detail.** Extract/reuse data-driven presentation components and pass the selected student's aggregated detail data instead. An administrator cannot use `/api/v1/dashboard/me`, `/schedule/me`, `/grades/me`, `/holds/me`, or `/billing/me` to view another student.
+Student page wrappers fetch their own student-only `/me` endpoints. Shared data-driven record components receive the selected student's aggregate inside admin detail. Preserve this boundary: an administrator cannot use `/api/v1/dashboard/me`, `/schedule/me`, `/grades/me`, `/holds/me`, or `/billing/me` to view another student.
 
 Route `/set-password` before the existing logged-in/logged-out role branch and before the session-loading screen. It must work even when the browser already has a student/admin session. Successful password completion clears that browser's SIS cookies, so clear client session state too.
 
@@ -47,7 +49,7 @@ Route `/set-password` before the existing logged-in/logged-out role branch and b
 | `POST /api/auth/refresh` | `{}` -> `{ user }` using the HttpOnly refresh cookie |
 | `POST /api/auth/logout` | `{}` -> `204`, no JSON body |
 
-The API user contains `id`, `email`, `fullName`, and normalized `role: 'student' | 'admin'`. The current client `SignedInUser` type omits `id`; extend it if needed rather than inventing an actor-lookup endpoint.
+The API user and client `SignedInUser` type contain `id`, `email`, `fullName`, and normalized `role: 'student' | 'admin'`. Detail Auth metadata is nullable. Grade status is the backend's `final | in_progress | withdrawn | not_recorded` union.
 
 - All browser requests use `credentials: 'include'`. Do not read/store JWTs, set a browser Authorization header, or authenticate directly with the Supabase browser SDK.
 - Successful admin login goes to `/admin`; successful student login stays in the student shell. Block student access to admin routes, but remember the backend is the actual authorization authority.

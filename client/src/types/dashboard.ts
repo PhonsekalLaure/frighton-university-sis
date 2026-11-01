@@ -1,4 +1,5 @@
 export interface SignedInUser {
+  id: string;
   fullName: string;
   email: string;
   role: 'student' | 'admin';
@@ -28,9 +29,11 @@ export interface ScheduleData {
   classes: Array<{ id: string; courseCode: string; title: string; credits: number; sectionNumber: string; schedule: string | null; room: string | null; instructor: { name: string | null; email: string | null } }>;
 }
 
+export type GradeStatus = 'final' | 'in_progress' | 'withdrawn' | 'not_recorded';
+
 export interface GradesData {
   summary: { cumulativeGpa: number | null; attemptedCredits: number; creditsEarned: number };
-  terms: Array<{ id: string; code: string; name: string; startDate: string; endDate: string; isActive: boolean; gpa: number | null; attemptedCredits: number; creditsEarned: number; courses: Array<{ id: string; courseCode: string; title: string; credits: number; sectionNumber: string; grade: string | null; gradeStatus: string; isCurrent: boolean }> }>;
+  terms: Array<{ id: string; code: string; name: string; startDate: string; endDate: string; isActive: boolean; gpa: number | null; attemptedCredits: number; creditsEarned: number; courses: Array<{ id: string; courseCode: string; title: string; credits: number; sectionNumber: string; grade: string | null; gradeStatus: GradeStatus; isCurrent: boolean }> }>;
 }
 
 export interface BillingStatement {

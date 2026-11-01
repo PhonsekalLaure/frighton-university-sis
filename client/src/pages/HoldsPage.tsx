@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
 import { CircleCheck, ShieldAlert, TriangleAlert } from 'lucide-react';
-import { apiGet } from '../lib/api';
+import { useApiRead } from '../lib/useApiRead';
 import { ErrorState, LoadingState, SectionHeading } from '../components/PageStates';
 import type { HoldsData, StudentHold, StudentHoldType } from '../types/dashboard';
 import type { PortalView } from '../components/AppShell';
@@ -26,27 +25,27 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function HoldCard({ hold, active, onNavigate }: { hold: StudentHold; active: boolean; onNavigate: (view: PortalView) => void }) {
+function HoldCard({ hold, active, onNavigate }: { hold: StudentHold; active: boolean; onNavigate?: (view: PortalView) => void }) {
   const nextStep = guidance[hold.holdType];
   return <article className={`hold-card ${active ? 'hold-card-active' : ''}`}>
     <div className="hold-card-icon">{active ? <ShieldAlert size={19} /> : <CircleCheck size={19} />}</div>
     <div className="hold-card-main">
       <div className="hold-card-heading"><div><p className="eyebrow">{labels[hold.holdType]}</p><h2>{hold.reason}</h2></div><span className={`status-pill ${active ? 'hold-active' : 'hold-resolved'}`}>{active ? 'Active' : 'Resolved'}</span></div>
       <dl className="hold-details"><div><dt>Placed by</dt><dd>{hold.placedBySystem}</dd></div><div><dt>Placed</dt><dd>{formatDate(hold.placedAt)}</dd></div>{!active && <div><dt>Resolved</dt><dd>{formatDate(hold.resolvedAt)}</dd></div>}</dl>
-      {active && <div className="hold-guidance"><TriangleAlert size={15} /><span>{nextStep.message}</span>{nextStep.view && <button type="button" onClick={() => { if (nextStep.view) onNavigate(nextStep.view); }}>Open {nextStep.view === 'library' ? 'Library' : 'Billing'}</button>}</div>}
+      {active && <div className="hold-guidance"><TriangleAlert size={15} /><span>{nextStep.message}</span>{nextStep.view && onNavigate && <button type="button" onClick={() => { if (nextStep.view) onNavigate(nextStep.view); }}>Open {nextStep.view === 'library' ? 'Library' : 'Billing'}</button>}</div>}
     </div>
   </article>;
 }
 
 export function HoldsPage({ onNavigate }: { onNavigate: (view: PortalView) => void }) {
-  const [data, setData] = useState<HoldsData | null>(null);
-  const [error, setError] = useState('');
-
-  useEffect(() => { apiGet<HoldsData>('/api/v1/holds/me').then(setData).catch((reason: Error) => setError(reason.message)); }, []);
-  if (error) return <ErrorState message={error} />;
+  const { data, error, retry } = useApiRead<HoldsData>('/api/v1/holds/me');
+  if (error) return <ErrorState message={error.message} forbidden={error.status === 403} onRetry={retry} />;
   if (!data) return <LoadingState />;
+  return <><SectionHeading eyebrow="STUDENT RECORD" title="Holds" description="Review restrictions on your university account and the steps needed to clear them." /><HoldsRecords data={data} onNavigate={onNavigate} /></>;
+}
 
-  return <><SectionHeading eyebrow="STUDENT RECORD" title="Holds" description="Review restrictions on your university account and the steps needed to clear them." />
+export function HoldsRecords({ data, onNavigate }: { data: HoldsData; onNavigate?: (view: PortalView) => void }) {
+  return <>
     <section className="holds-section"><div className="card-title-row"><div><p className="eyebrow">ACTIVE RESTRICTIONS</p><h2>{data.activeHolds.length ? `${data.activeHolds.length} active hold${data.activeHolds.length === 1 ? '' : 's'}` : 'No active holds'}</h2></div><ShieldAlert className="card-icon" size={22} /></div>
       {data.activeHolds.length ? <div className="holds-list">{data.activeHolds.map(hold => <HoldCard key={hold.id} hold={hold} active onNavigate={onNavigate} />)}</div> : <div className="empty-state"><CircleCheck size={27} /><div><h2>Your account is clear</h2><p>You have no active holds at this time.</p></div></div>}
     </section>

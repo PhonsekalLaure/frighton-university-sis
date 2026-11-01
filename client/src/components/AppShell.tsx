@@ -1,4 +1,4 @@
-import { Bell, BookOpen, CalendarDays, CreditCard, GraduationCap, LayoutDashboard, LibraryBig, LogOut, ScrollText, ShieldAlert } from 'lucide-react';
+import { BookOpen, CalendarDays, CreditCard, GraduationCap, LayoutDashboard, LibraryBig, LogOut, ScrollText, ShieldAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { SignedInUser } from '../types/dashboard';
 
@@ -26,7 +26,7 @@ export function AppShell({ user, activeView, onNavigate, onLogout, children }: A
       <div className="sidebar-footer"><div className="secure-badge"><ScrollText size={16} /><span><strong>Official SIS record</strong><small>Your academic data is protected.</small></span></div><button className="logout-button" onClick={onLogout}><LogOut size={16} />Sign out</button></div>
     </aside>
     <div className="portal-main">
-      <header className="topbar"><div className="topbar-brand"><UniversityMiniMark /> <span>FRIGHTON UNIVERSITY SIS</span></div><div className="topbar-actions"><span className="term-pill"><BookOpen size={15} /> Student portal</span><button className="notification-button" aria-label="Notifications"><Bell size={18} /></button><div className="user-chip"><div className="avatar">{user.fullName?.charAt(0) || 'S'}</div><span>{user.fullName || user.email}</span></div></div></header>
+      <header className="topbar"><div className="topbar-brand"><UniversityMiniMark /> <span>FRIGHTON UNIVERSITY SIS</span></div><div className="topbar-actions"><span className="term-pill"><BookOpen size={15} /> Student portal</span><div className="user-chip"><div className="avatar">{user.fullName?.charAt(0) || 'S'}</div><span>{user.fullName || user.email}</span></div></div></header>
       <main className="page-content">{children}</main>
     </div>
   </div>;

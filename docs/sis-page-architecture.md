@@ -45,16 +45,18 @@ The dashboard must render assignment language such as "current academic credits"
 
 | Route | Audience | Backing system/tables | Notes |
 | --- | --- | --- | --- |
-| `/schedule` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | `GET /api/v1/schedule/me` is available; weekly and list views remain future UI work. |
-| `/grades` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | `GET /api/v1/grades/me` returns the static transcript and GPA; presentation remains future UI work. |
-| `/billing` | Student | `student_accounts`, `student_payments`, `academic_terms` | `GET /api/v1/billing/me` returns the current balance and historical cashier-posted statements. It is not an online payment portal. |
+| `/schedule` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | Current assignment list, instructors, rooms, and published meetings are implemented. A weekly calendar is outside this baseline. |
+| `/grades` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | Static transcript, term/cumulative GPA, credit totals, and distinct grade statuses are implemented. |
+| `/billing` | Student | `student_accounts`, `student_payments`, `academic_terms` | Current and historical statements, charges, and receipt ledgers are implemented with Manila timestamps and calendar due dates. No online payments. |
 | `/library` | Student | LMS `books`, `reservations`, `borrow_records` | Stage 1 shows an integration-pending landing page. Stage 2 adds catalog, reservation, loan, due-date, and read-only fine data. |
 | `/holds` | Student | SIS `student_holds` | `GET /api/v1/holds/me` and the read-only account-restrictions page are implemented. Library restrictions use `hold_type = 'library_debt'`. |
-| `/admin` | Admin | SIS portal tables | The backend API is implemented under `/api/v1/admin`; the frontend still displays the administrator handoff. |
+| `/admin` | Admin | SIS portal tables | Separate console: dashboard, account management, full read-only student detail, and filtered/paginated audit history. |
 
 ## UI shell
 
-The protected student shell exposes Dashboard, Schedule, Grades, Billing, Library, and Holds. It supports browser back/forward navigation and shows the active term and active-hold indicator. Use the `studentNumber` returned by the API; do not use the retired `frighton_id` name. Administrator navigation belongs to the separate admin surface: an administrator who signs in here sees an explicit handoff rather than a student shell.
+The protected student shell exposes Dashboard, Schedule, Grades, Billing, Library, and Holds. The URL determines the active page, including direct links and back/forward navigation. Use the API's `studentNumber`. Administrators receive a separate console and full aggregate-backed student detail; students cannot enter admin routes. Sign-out remains available at mobile breakpoints. The unused notification control is hidden.
+
+Concurrent expired safe reads share one refresh request and retry once. Account writes, email sends, and password submissions are never automatically replayed. Expired refresh credentials return to login; temporary Auth outages remain retryable without being presented as an empty session. The browser uses HTTP-only cookies and never stores Auth tokens in local/session storage.
 
 ## Library view intent
 
@@ -109,14 +111,9 @@ The Billing page is a read-only statement center, not a payment gateway. The fro
 
 ## Implementation order
 
-1. Complete the protected student shell, including the Library and Holds navigation and administrator handoff.
-2. Define and implement the separate LMS server-to-server API/client contract with distinct directional credentials.
-3. Replace the Library pending state with catalog search, available-copy pickup reservation, active reservations, current loans, and read-only unpaid fines.
-4. Implement the Holds read API and `/holds` view, including active restrictions and resolved history.
-5. Complete remaining student pages against their existing student-only APIs.
-6. Build the separate admin console against the implemented admin API below.
+The standalone student pages and administrator console are implemented for local demonstration. Automated client tests mock account/mail requests; database regression tests roll their synthetic writes back. Real invitation/recovery delivery and deployed configuration require the separate approved account-operations gate.
 
-Steps 1 and 4 are the completed Stage 1 baseline. Steps 2 and 3 require the separate LMS repository and test environment; they are not implemented in the SIS while its service contract is unavailable.
+The next integration phase defines the distinct directional LMS credentials and private service contract, implements the SIS Library gateway and UI, and upgrades idempotent debt-hold synchronization jointly with LMS. The Library landing page remains integration-pending until that phase passes its contract tests.
 
 ## Admin backend contract
 
@@ -143,7 +140,7 @@ Pagination defaults to page 1 and 25 rows; page size is limited to 100. Invalid/
 
 - `admin_write_student` commits directory/profile changes and their audit event together. Only the service role can execute admin RPCs; the database rechecks the actor's active directory-admin role.
 - Auth identities are resolved by email, not by assuming `users.users_id` equals `auth.users.id`. A minimal service-only SQL lookup avoids exposing Auth secrets or enumerating the Auth directory through the API.
-- Invitations use `CLIENT_URL` plus `/set-password`. Configure this exact URL in Supabase Auth's redirect allowlist. The frontend acceptance/password screen is a later milestone; sending mail successfully does not yet make that screen available.
+- Invitations use `CLIENT_URL` plus `/set-password`. The frontend password screen is implemented locally. Configure its exact deployed URL in the Auth redirect allowlist only through the approved rollout; API mail acceptance does not prove inbox delivery.
 - Admins never supply passwords. The legacy required directory password column receives a fixed managed-by-Auth marker and is never read or returned by this feature.
 - Provisioning failures remove only a newly created invitation whose ownership can be confirmed. Existing Auth or directory accounts are never adopted or deleted. Duplicate email/student number returns `409`.
 - Edits use a database lease (five-minute expiry) around Auth and SQL operations to serialize account changes across API replicas. A conflicting lease returns `409`. Auth email updates are rolled back if the SQL transaction rejects the edit. If rollback cannot be confirmed, the API returns `503`, retains the lease, and logs only operation/student identifiers for review.
