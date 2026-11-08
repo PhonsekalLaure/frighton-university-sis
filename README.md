@@ -45,8 +45,10 @@ Local feature completion is separate from live email-delivery readiness. Redirec
 Typed entity fixtures live in `server/src/seed-data`. **Seeding writes to the database and resets matching seeded passwords.** Do not run it merely to verify UI work.
 
 - `npm run seed`: provisions three admin and ten student Auth accounts and related data. Admins go into shared `users`; only students receive `profiles` and academic/billing records.
-- `npm run reset:sis -- --confirm`: permanently clears SIS academic/financial/profile data while preserving shared users, Auth accounts, LMS data, and audit history.
+- `npm run reset:sis -- --confirm`: permanently clears SIS academic/financial/profile data and SIS library-debt synchronization state while preserving shared users, Auth accounts, LMS data (including the debt outbox), and audit history.
 - `npm run setup:sis -- --confirm`: runs the reset followed by the seed.
+
+These destructive commands are for disposable development databases. Stop both APIs and the LMS maintenance worker before resetting so they cannot repopulate debt state between deletions. After setup, restart the APIs and worker and verify debt synchronization before enabling student access. Reset is sequential, not transactional; investigate any failure before retrying. Do not use reset/setup against the shared live project.
 
 The `20261101000000_shared_admin_directory.sql` migration removes obsolete admin profiles only when no conflicting student records exist and makes SIS admin permissions use the shared directory. A full reseed is unnecessary for that correction.
 
