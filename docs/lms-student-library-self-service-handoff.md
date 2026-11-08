@@ -1,17 +1,17 @@
 # LMS Handoff Manual: Student Library Self-Service v1
 
 **Audience:** LMS engineering and QA team  
-**Purpose:** Define what the LMS must provide before Frighton SIS enables live catalog, loan, fine, and reservation features in the student portal.
+**Purpose:** Document the implemented, default-disabled Library v1 contract and the remaining deployment gates. See `library-self-service.openapi.json` and `library-self-service-operations.md` for the current specification and rollout.
 
 ## 1. Scope
 
-SIS has completed the first portal stage:
+Both repositories implement Library v1 behind a default-off SIS feature gate:
 
 - Students can sign in to the protected SIS portal.
 - Students can view their SIS account holds at `/holds`.
-- The `/library` page is intentionally an integration-pending screen; it has no synthetic catalog data or enabled reservation controls.
+- The `/library` page shows the integration-pending screen while disabled; enabling the verified integration reveals real catalog, reservation, loan, and unpaid-amount data.
 
-The next stage connects SIS to LMS through private server-to-server APIs. LMS remains the authority for its `books`, `reservations`, `borrow_records`, availability, expiry, due dates, and fines. SIS remains the authority for student identity, academic eligibility, and university-level holds.
+The implementation connects SIS to LMS through private server-to-server APIs. LMS remains the authority for its `books`, `reservations`, `borrow_records`, availability, expiry, due dates, and fines. SIS remains the authority for student identity, academic eligibility, and university-level holds.
 
 ## 2. Non-negotiable boundaries
 
@@ -31,7 +31,7 @@ Two credentials are required and they must be different:
 | LMS → SIS | LMS and SIS | LMS calls SIS to verify borrowing eligibility and synchronize library-debt holds. Send it in `X-LMS-API-KEY`. |
 | SIS → LMS | LMS issues; SIS stores | SIS calls the private LMS service endpoints for the signed-in student's Library page and reservation actions. |
 
-Please provide the SIS team with the LMS **test** base URL, authentication scheme, credential-delivery method, and credential rotation procedure. Do not put secrets in source code, browser environment variables, tickets visible to students, or this document.
+Configure the LMS **test** base URL and distinct directional credentials according to the operations runbook; agree secure secret delivery before staging. Do not put secrets in source code, browser environment variables, tickets visible to students, or this document.
 
 ## 4. Existing SIS API LMS can call
 
@@ -69,7 +69,7 @@ Example response:
 }
 ```
 
-LMS must deny a new loan or reservation when `canBorrow` is `false`.
+LMS denies new loans/reservations when `canBorrow` is false or SIS verification fails. Any existing active loan blocks another reservation. Returns, cancellation, and offline charge settlement remain available without SIS eligibility checks.
 
 ### Current debt-hold endpoints
 
@@ -80,7 +80,7 @@ POST /api/v1/integration/holds
 POST /api/v1/integration/holds/:holdId/resolve
 ```
 
-The current placement body is:
+The compatibility placement body accepts `studentNumber`; any legacy `reason`/`amount` values below are ignored:
 
 ```json
 {
@@ -90,11 +90,11 @@ The current placement body is:
 }
 ```
 
-**Do not treat these endpoints as production-ready debt synchronization yet.** The SIS and LMS teams must first make the synchronization idempotent as described in section 7.
+These compatibility endpoints now recompute authoritative aggregate debt; supplied reasons/amounts cannot create arbitrary holds. Placement requires only `studentNumber`. Deploy both migrations and the maintenance worker before use.
 
 ## 5. LMS service API to deliver
 
-The endpoint paths below are the proposed service contract. Equivalent paths are acceptable if both teams agree before implementation, but the fields and behavior must remain equivalent.
+The endpoint paths below are implemented. Authenticate with `X-SIS-API-KEY`. The OpenAPI file is authoritative for additive fine `kind` fields, cover proxying, debt endpoints, staff charge actions, and validation.
 
 All endpoints are private server-to-server endpoints. SIS will attach the dedicated SIS-to-LMS credential. LMS must not infer a student from a browser session or accept an LMS credential from the browser.
 
@@ -229,7 +229,7 @@ LMS must atomically allocate an available copy, prevent duplicate active reserva
 DELETE /service/v1/reservations/:reservationId
 ```
 
-SIS will include the server-derived `studentNumber` using the agreed authentication or request convention. LMS must verify that the reservation belongs to that student and is still eligible for cancellation. Return `204 No Content` on success.
+SIS includes the server-derived `studentNumber` in the DELETE JSON body. LMS must verify that the reservation belongs to that student and is still eligible for cancellation. Return `204 No Content` on success.
 
 ## 6. Required LMS lifecycle behavior
 
@@ -251,7 +251,7 @@ Before production release, LMS and SIS must jointly implement and test this poli
 3. LMS resolves the debt hold only after all qualifying overdue debt and unpaid replacement charges are cleared.
 4. Retried resolution requests must be safe and must not resolve a hold while qualifying debt remains.
 
-The current SIS placement endpoint creates holds and is not yet idempotent. Coordinate the upgraded request/response contract with the SIS team before enabling this integration in production.
+The upgraded versioned endpoint is `PUT /api/v1/integration/library-debt/:studentNumber`. A durable LMS outbox delivers aggregate snapshots. SIS ignores old versions, maintains one active LMS-owned debt hold, and verifies live LMS debt before clearance. The compatibility placement/resolution routes delegate to this workflow.
 
 ## 8. Errors and retry behavior
 

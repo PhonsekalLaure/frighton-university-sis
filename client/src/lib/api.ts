@@ -92,3 +92,4 @@ async function write<T>(path: string, method: string, body: unknown): Promise<T>
 
 export const apiPost = <T>(path: string, body: unknown) => write<T>(path, 'POST', body);
 export const apiPatch = <T>(path: string, body: unknown) => write<T>(path, 'PATCH', body);
+export const apiDelete = (path: string) => write<void>(path, 'DELETE', undefined);

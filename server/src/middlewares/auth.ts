@@ -12,7 +12,7 @@ export interface AuthenticatedRequest extends Request {
 export const requireAuth: RequestHandler = async (req: AuthenticatedRequest, res, next) => {
   const token = readAccessToken(req);
   if (!token) {
-    res.status(401).json({ error: 'Please sign in to access your account.' });
+    res.status(401).json({ error: 'Please sign in to access your account.', code:'UNAUTHORIZED' });
     return;
   }
 
@@ -38,7 +38,7 @@ export const protectCookieRequests: RequestHandler = (req, res, next) => {
   const isIntegrationRoute = req.baseUrl?.startsWith('/api/v1/integration') || req.path?.startsWith('/api/v1/integration') || req.originalUrl?.startsWith('/api/v1/integration');
 
   if (origin !== config.clientUrl && !serverBearerRequest && !serverApiKeyRequest && !isIntegrationRoute) {
-    res.status(403).json({ error: 'Request origin is not allowed.' });
+    res.status(403).json({ error: 'Request origin is not allowed.', code:'FORBIDDEN' });
     return;
   }
   next();
@@ -78,12 +78,13 @@ export function requireRole(allowedRoles: ('student' | 'admin')[]): RequestHandl
   return (req: AuthenticatedRequest, res, next) => {
     const user = (res.locals.user || req.user) as AuthenticatedUser | undefined;
     if (!user) {
-      res.status(401).json({ error: 'Please sign in to access this resource.' });
+      res.status(401).json({ error: 'Please sign in to access this resource.', code:'UNAUTHORIZED' });
       return;
     }
     if (!allowedRoles.includes(user.role)) {
       res.status(403).json({
         error: `Forbidden: Access requires one of the following roles: [${allowedRoles.join(', ')}]`,
+        code:'FORBIDDEN',
       });
       return;
     }

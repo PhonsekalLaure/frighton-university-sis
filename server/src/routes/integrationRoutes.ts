@@ -1,150 +1,96 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, type RequestHandler } from 'express';
+import { timingSafeEqual } from 'node:crypto';
 import { config } from '../config/env.js';
 import { getSupabaseAdmin } from '../config/supabase.js';
-
-export const integrationRouter = Router();
-
-/**
- * Middleware ensuring requests come from an authorized external service (such as LMS)
- */
-const requireIntegrationApiKey = (req: Request, res: Response, next: NextFunction): void => {
-  const apiKey = req.headers['x-lms-api-key'] || req.headers['x-api-key'];
-
-  if (!apiKey || apiKey !== config.lms.apiKey) {
-    res.status(401).json({
-      error: 'Unauthorized: Invalid or missing integration API key',
-    });
+import { libraryEligibility } from '../services/libraryEligibility.js';
+import { LibraryError } from '../services/lmsClient.js';
+import { isDebtSnapshot } from '../services/libraryContracts.js';
+import { latestDebt, applyDebt } from '../services/libraryDebt.js';
+const auth: RequestHandler = (req, res, next) => {
+  const supplied = Buffer.from(req.get('x-lms-api-key') ?? req.get('x-api-key') ?? ''),
+    expected = Buffer.from(config.lms.apiKey);
+  if (
+    !expected.length ||
+    config.lms.apiKey === config.lms.serviceKey ||
+    supplied.length !== expected.length ||
+    !timingSafeEqual(supplied, expected)
+  ) {
+    res
+      .status(401)
+      .json({ error: 'Unauthorized: Invalid or missing integration API key', code: 'UNAUTHORIZED' });
+    return;
+  }
+  if (req.get('origin')) {
+    res.status(403).json({ error: 'Server-to-server access required.', code: 'FORBIDDEN' });
     return;
   }
   next();
 };
-
-integrationRouter.use(requireIntegrationApiKey);
-
-/**
- * GET /api/v1/integration/students/:studentNumber/status
- * Used by the Library Management System to check whether a student has any
- * blocking holds or is in good academic standing before borrowing books.
- */
-integrationRouter.get('/students/:studentNumber/status', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const { studentNumber } = req.params;
-    const supabaseAdmin = getSupabaseAdmin();
-
-    const { data: profile, error } = await supabaseAdmin
+function number(value: unknown) {
+  if (typeof value !== 'string' || !/^[A-Z0-9][A-Z0-9-]{0,49}$/.test(value))
+    throw new LibraryError(400, 'INVALID_REQUEST', 'A valid studentNumber is required.');
+  return value;
+}
+function uuid(value: unknown) {
+  if (typeof value !== 'string' || !/^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i.test(value))
+    throw new LibraryError(400, 'INVALID_REQUEST', 'A valid hold ID is required.');
+  return value;
+}
+const route =
+  (fn: (req: any, res: any) => Promise<void>): RequestHandler =>
+  (req, res, next) => {
+    Promise.resolve(fn(req, res)).catch(next);
+  };
+export const integrationRouter = Router();
+integrationRouter.use(auth);
+integrationRouter.get(
+  '/students/:studentNumber/status',
+  route(async (req, res) => {
+    res.json(await libraryEligibility(number(req.params.studentNumber)));
+  }),
+);
+integrationRouter.put(
+  '/library-debt/:studentNumber',
+  route(async (req, res) => {
+    const n = number(req.params.studentNumber);
+    if (!isDebtSnapshot(req.body, n))
+      throw new LibraryError(400, 'INVALID_REQUEST', 'A valid versioned debt snapshot is required.');
+    res.json(await applyDebt(req.body));
+  }),
+);
+// Compatibility routes no longer trust arbitrary amounts or a single cleared debt item.
+integrationRouter.post(
+  '/holds',
+  route(async (req, res) => {
+    const snapshot = await latestDebt(number(req.body?.studentNumber));
+    res.json(await applyDebt(snapshot));
+  }),
+);
+integrationRouter.post(
+  '/holds/:holdId/resolve',
+  route(async (req, res) => {
+    const db = getSupabaseAdmin();
+    const hold = await db
+      .from('student_holds')
+      .select('student_id')
+      .eq('id', uuid(req.params.holdId))
+      .eq('hold_type', 'library_debt')
+      .eq('placed_by_system', 'Frighton LMS')
+      .maybeSingle();
+    if (hold.error)
+      throw new LibraryError(503, 'DEBT_SYNC_UNAVAILABLE', 'Library hold could not be verified.');
+    if (!hold.data) throw new LibraryError(404, 'HOLD_NOT_FOUND', 'LMS library hold was not found.');
+    const profile = await db
       .from('profiles')
-      .select('id, student_number, first_name, last_name, email, role, academic_status, department')
-      .eq('student_number', studentNumber)
+      .select('student_number')
+      .eq('id', hold.data.student_id)
       .single();
-
-    if (error || !profile) {
-      res.status(404).json({
-        error: `Entity with ID ${studentNumber} not found in Frighton University SIS`,
-      });
-      return;
-    }
-
-    // Retrieve active holds
-    const { data: holds } = await supabaseAdmin
-      .from('student_holds')
-      .select('*')
-      .eq('student_id', profile.id)
-      .is('resolved_at', null);
-
-    res.json({
-      studentNumber: profile.student_number,
-      name: `${profile.first_name} ${profile.last_name}`,
-      email: profile.email,
-      role: profile.role,
-      academicStatus: profile.academic_status,
-      department: profile.department,
-      canBorrow: profile.academic_status === 'active' && (!holds || holds.length === 0),
-      activeHolds: holds || [],
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * POST /api/v1/integration/holds
- * Allows the Library Management System to automatically place a hold on a student's SIS account
- * (e.g. for overdue materials or unpaid replacement fines).
- */
-integrationRouter.post('/holds', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const { studentNumber } = req.body;
-    const { reason, amount } = req.body;
-
-    if (!studentNumber || !reason) {
-      res.status(400).json({ error: 'studentNumber and reason are required' });
-      return;
-    }
-
-    const supabaseAdmin = getSupabaseAdmin();
-
-    // Find student
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .eq('student_number', studentNumber)
-      .single();
-
-    if (!profile) {
-      res.status(404).json({ error: `Student with ID ${studentNumber} not found` });
-      return;
-    }
-
-    const { data: hold, error } = await supabaseAdmin
-      .from('student_holds')
-      .insert({
-        student_id: profile.id,
-        hold_type: 'library_debt',
-        reason: amount ? `${reason} (Outstanding Balance: $${amount})` : reason,
-        placed_by_system: 'Frighton LMS',
-      })
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    res.status(201).json({
-      message: 'Library hold successfully placed in SIS',
-      hold,
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * POST /api/v1/integration/holds/:holdId/resolve
- * Allows the Library Management System to resolve a hold once items or fines are settled.
- */
-integrationRouter.post('/holds/:holdId/resolve', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const { holdId } = req.params;
-    const supabaseAdmin = getSupabaseAdmin();
-
-    const { data: hold, error } = await supabaseAdmin
-      .from('student_holds')
-      .update({ resolved_at: new Date().toISOString() })
-      .eq('id', holdId)
-      .select()
-      .single();
-
-    if (error || !hold) {
-      res.status(404).json({ error: 'Hold record not found or could not be updated' });
-      return;
-    }
-
-    res.json({
-      message: 'Library hold successfully resolved in SIS',
-      hold,
-    });
-  } catch (err) {
-    next(err);
-  }
-});
+    if (profile.error || !profile.data)
+      throw new LibraryError(503, 'DEBT_SYNC_UNAVAILABLE', 'Student could not be verified.');
+    const snapshot = await latestDebt(profile.data.student_number);
+    if (snapshot.qualifyingDebtCount > 0)
+      throw new LibraryError(409, 'LIBRARY_DEBT_REMAINS', 'Qualifying library debt remains.');
+    const result = await applyDebt(snapshot);
+    res.json(result);
+  }),
+);

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:library-db": "tsx --test integration/*.test.ts",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
@@ -24,6 +25,7 @@
     "express": "^4.21.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.13.8",

@@ -1,3 +1,5 @@
+> Library v1 implementation update: the gateway, private LMS APIs, allocation, and debt synchronization are implemented but disabled by default. The Stage 1/Stage 2 descriptions below retain the original design sequence. Current release/configuration instructions: `library-self-service-operations.md`; current wire contract: `library-self-service.openapi.json`.
+
 # Frighton University SIS - Page Architecture & Blueprint
 
 ## Scope and delivery status
@@ -7,10 +9,10 @@ Frighton SIS is a student self-service portal with a distinct administrator surf
 - Only active `student` and `admin` directory accounts may sign in.
 - The implemented dashboard endpoint is student-only: `GET /api/v1/dashboard/me`.
 - The dashboard reads academic assignments from `academic_records`; this SIS does not model enrollment, registration, waitlists, section capacity, instructor accounts, or registrar accounts.
-- The React client implements sign-in, session restoration, browser navigation, and a protected student shell. Dashboard, Schedule, Grades, and Billing are available student pages; Stage 1 adds the Holds page and a Library landing page.
+- The React client implements sign-in, session restoration, browser navigation, and a protected student shell. Dashboard, Schedule, Grades, and Billing are available student pages; Holds and the gated Library self-service page are implemented.
 - SIS owns student identity, borrowing eligibility, and university holds. The Library Management System (LMS) owns its catalog, reservations, loans, due dates, and fines.
 - The student browser calls SIS APIs only. SIS and LMS communicate server-to-server with separate credentials; LMS API keys and service-role capabilities never enter browser code.
-- Dashboard, Schedule, Grades, Billing, and Holds have student-only read APIs. The Library landing page is available while its LMS-backed features remain pending. The administrator surface remains separate.
+- Dashboard, Schedule, Grades, Billing, and Holds have student-only read APIs. The Library feature gate controls access to its implemented LMS-backed features. The administrator surface remains separate.
 
 ## Route map
 
@@ -48,7 +50,7 @@ The dashboard must render assignment language such as "current academic credits"
 | `/schedule` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | Current assignment list, instructors, rooms, and published meetings are implemented. A weekly calendar is outside this baseline. |
 | `/grades` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | Static transcript, term/cumulative GPA, credit totals, and distinct grade statuses are implemented. |
 | `/billing` | Student | `student_accounts`, `student_payments`, `academic_terms` | Current and historical statements, charges, and receipt ledgers are implemented with Manila timestamps and calendar due dates. No online payments. |
-| `/library` | Student | LMS `books`, `reservations`, `borrow_records` | Stage 1 shows an integration-pending landing page. Stage 2 adds catalog, reservation, loan, due-date, and read-only fine data. |
+| `/library` | Student | LMS `books`, `reservations`, `borrow_records` | The default-off feature gate shows a pending screen; enabling it exposes catalog, reservations, current loans, due dates, and unpaid amounts. |
 | `/holds` | Student | SIS `student_holds` | `GET /api/v1/holds/me` and the read-only account-restrictions page are implemented. Library restrictions use `hold_type = 'library_debt'`. |
 | `/admin` | Admin | SIS portal tables | Separate console: dashboard, account management, full read-only student detail, and filtered/paginated audit history. |
 
@@ -60,9 +62,9 @@ Concurrent expired safe reads share one refresh request and retry once. Account 
 
 ## Library view intent
 
-The Library page is a student self-service view of LMS-owned data. It is not a librarian console and it does not give the browser direct database or LMS access. Stage 1 deliberately renders an integration-pending landing page; it does not show synthetic catalog data or enabled reservation/cancellation controls.
+The Library page is a student self-service view of LMS-owned data. It is not a librarian console and it does not give the browser direct database or LMS access. When disabled, the Library renders an integration-pending page. When enabled, it uses real LMS data and student-scoped actions.
 
-- Stage 2 will show a searchable catalog with availability and a Reserve action for available copies.
+- The enabled Library shows a searchable catalog with availability and a Reserve action for available copies.
 - A v1 reservation is a Main Library pickup reservation, not a waitlist. An active reservation is ready for pickup, expires after three days, and can be cancelled by the student before fulfilment.
 - Show the student's active reservations, including book details, status, reservation date, Main Library pickup location, and expiry date.
 - Show current loans with Manila-local due dates, overdue days, and read-only unpaid fines.
@@ -81,9 +83,9 @@ The Holds page is a read-only account-restrictions view, not a library-loan or r
 
 ## Student APIs and LMS integration
 
-Every student API requires `requireAuth` plus `requireStudent` and derives the student from the authenticated SIS session; the browser must never submit a student identifier or an LMS credential. The Holds endpoint is implemented in Stage 1. Library gateway APIs are planned for Stage 2 only, after the separate LMS publishes its service contract.
+Every student API requires `requireAuth` plus `requireStudent` and derives the student from the authenticated SIS session; the browser must never submit a student identifier or an LMS credential. The Holds endpoint is implemented in Stage 1. Library gateway APIs are implemented against the private LMS service contract and remain protected by the default-off feature gate.
 
-| Planned SIS API | Purpose |
+| SIS API | Purpose |
 | --- | --- |
 | `GET /api/v1/library/books` | Return LMS-backed catalog search and availability data. |
 | `GET /api/v1/library/me` | Return the signed-in student's active reservations, current loans, due dates, and read-only unpaid fines. |
@@ -93,11 +95,11 @@ Every student API requires `requireAuth` plus `requireStudent` and derives the s
 
 SIS checks active status and unresolved SIS holds before forwarding a reservation request to LMS. LMS remains authoritative for availability, reservation state, loans, due dates, and fine amounts. If LMS is unavailable, SIS must not create or change a reservation locally.
 
-When the Stage 2 contract is available, SIS configuration will add an LMS base URL and a distinct SIS-to-LMS credential. The existing LMS-to-SIS integration credential remains inbound-only. Both credentials stay server-side and are never exposed to the student browser.
+SIS configuration includes an LMS base URL and a distinct SIS-to-LMS credential. The existing LMS-to-SIS integration credential remains inbound-only. Both credentials stay server-side and are never exposed to the student browser.
 
 LMS continues to call the protected SIS integration endpoints to check a student's borrowing eligibility and synchronize library debt holds. Use `studentNumber` consistently in every new contract; `frighton_id` is legacy terminology and must not be reintroduced.
 
-The Stage 2 LMS contract must create or update an idempotent SIS `library_debt` hold when a loan is 14 days overdue or an unpaid replacement charge exists. It must resolve that hold only when all qualifying library debt has been cleared; this synchronization upgrade is not part of the Stage 1 SIS portal release.
+The implemented LMS contract creates or updates an idempotent SIS `library_debt` hold when a loan is 14 days overdue or an unpaid replacement charge exists. It must resolve that hold only when all qualifying library debt has been cleared; the synchronization upgrade requires the new migrations and a supervised maintenance worker before release.
 
 ## Billing view intent
 
@@ -113,7 +115,7 @@ The Billing page is a read-only statement center, not a payment gateway. The fro
 
 The standalone student pages and administrator console are implemented for local demonstration. Automated client tests mock account/mail requests; database regression tests roll their synthetic writes back. Real invitation/recovery delivery and deployed configuration require the separate approved account-operations gate.
 
-The next integration phase defines the distinct directional LMS credentials and private service contract, implements the SIS Library gateway and UI, and upgrades idempotent debt-hold synchronization jointly with LMS. The Library landing page remains integration-pending until that phase passes its contract tests.
+The integration implementation provides the directional credentials, private service contract, SIS Library gateway/UI, and idempotent debt synchronization. Live deployment remains gated by migration preflight, configuration, worker startup, and staging acceptance.
 
 ## Admin backend contract
 

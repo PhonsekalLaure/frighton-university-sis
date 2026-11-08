@@ -13,6 +13,7 @@ import { createAdminRouter } from './routes/adminRoutes.js';
 import { createPasswordRouter } from './routes/passwordRoutes.js';
 import { protectCookieRequests } from './middlewares/auth.js';
 import { errorHandler } from './middlewares/errorHandler.js';
+import { createLibraryRouter } from './routes/libraryRoutes.js';
 
 export const createApp = (): Express => {
   const app = express();
@@ -44,6 +45,7 @@ export const createApp = (): Express => {
   app.use('/api/v1/grades', gradesRouter);
   app.use('/api/v1/schedule', scheduleRouter);
   app.use('/api/v1/holds', holdsRouter);
+  app.use('/api/v1/library', createLibraryRouter());
   app.use('/api/v1/admin', createAdminRouter());
 
   // Centralized Error Handling

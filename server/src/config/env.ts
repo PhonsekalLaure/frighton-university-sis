@@ -13,6 +13,9 @@ export const config = {
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   },
   lms: {
-    apiKey: process.env.LMS_INTEGRATION_API_KEY || 'frighton-lms-sis-shared-secret-key-change-in-prod',
+    apiKey: process.env.LMS_INTEGRATION_API_KEY || '',
+    apiUrl: process.env.LMS_API_URL || 'http://localhost:5001',
+    serviceKey: process.env.LMS_SERVICE_API_KEY || '',
+    enabled: process.env.LIBRARY_SELF_SERVICE_ENABLED === 'true',
   },
 };

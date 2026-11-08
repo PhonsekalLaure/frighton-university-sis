@@ -534,7 +534,7 @@ describe('SIS Backend Foundation & Security Verification', () => {
     requireStudent({} as Request, response, () => { nextCalled = true; });
     assert.equal(statusCode, 403);
     assert.equal(nextCalled, false);
-    assert.deepEqual(body, { error: 'Forbidden: Access requires one of the following roles: [student]' });
+    assert.deepEqual(body, { error: 'Forbidden: Access requires one of the following roles: [student]', code:'FORBIDDEN' });
   });
 
   test('Teardown server', async () => {

@@ -59,3 +59,7 @@ The `20261101000000_shared_admin_directory.sql` migration removes obsolete admin
 - [Inbound integration contract](docs/lms-integration-spec.md)
 
 Existing inbound LMS compatibility routes are `GET /api/v1/integration/students/:studentNumber/status`, `POST /api/v1/integration/holds`, and `POST /api/v1/integration/holds/:holdId/resolve`. They do not constitute completed, idempotent debt synchronization.
+
+## Library self-service v1
+
+The student Library gateway and LMS integration are implemented behind `LIBRARY_SELF_SERVICE_ENABLED=false`. Follow [the operations runbook](docs/library-self-service-operations.md) for migration preflight, directional credentials, the LMS maintenance worker, isolated integration tests, and staging acceptance before enabling it. The [OpenAPI contract](docs/library-self-service.openapi.json) documents student, private service, debt, and replacement-charge endpoints.

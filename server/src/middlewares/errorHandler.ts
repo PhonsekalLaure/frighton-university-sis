@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthError } from '../services/authService.js';
 import { HoldsError } from '../services/holdsService.js';
 import { AccountError } from '../services/accountRateLimit.js';
+import { LibraryError } from '../services/lmsClient.js';
 
 export const errorHandler = (
   err: Error & { status?: number },
@@ -9,13 +10,14 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ): void => {
+  if (err instanceof LibraryError) { res.status(err.status).json({ error:err.message,code:err.code }); return; }
   if (err instanceof AccountError) {
     if (err.retryAfter) res.set('Retry-After', String(err.retryAfter));
     res.status(err.status).json({ error: err.message, code: err.code });
     return;
   }
   if (err instanceof AuthError || err instanceof HoldsError) {
-    res.status(err.status).json({ error: err.message });
+    res.status(err.status).json({ error: err.message,code:err.status===401?'UNAUTHORIZED':err.status===403?'FORBIDDEN':err.status===404?'NOT_FOUND':'SERVICE_UNAVAILABLE' });
     return;
   }
   if (err.status === 413) {

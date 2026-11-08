@@ -116,7 +116,7 @@ export function App({ initialPasswordLink = null }: { initialPasswordLink?: Pass
     {activeView === 'schedule' && <SchedulePage />}
     {activeView === 'grades' && <GradesPage />}
     {activeView === 'billing' && <BillingPage />}
-    {activeView === 'library' && <LibraryPage />}
+    {activeView === 'library' && <LibraryPage onNavigate={navigate} />}
     {activeView === 'holds' && <HoldsPage onNavigate={navigate} />}
   </AppShell>;
 }
