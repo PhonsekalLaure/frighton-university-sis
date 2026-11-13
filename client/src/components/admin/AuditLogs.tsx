@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { useApiRead } from '../../lib/useApiRead';
 import { timestamp } from '../../lib/format';
 import type { AuditEvent, Page } from '../../types/admin';
@@ -24,7 +24,14 @@ function AuditFilters({ search, onApply }: { search: string; onApply: (params: U
     next.set('pageSize', params.get('pageSize') ?? '25'); next.set('page', '1'); onApply(next);
   }
   const set = (key: keyof typeof values, value: string) => setValues(current => ({ ...current, [key]: value }));
-  return <><form className="filter-bar audit-filters" onSubmit={apply}><label>Action<select value={values.action} onChange={event => set('action', event.target.value)}><option value="">All actions</option>{Object.entries(actionLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>Student UUID<input value={values.studentId} onChange={event => set('studentId', event.target.value)} /></label><label>Actor UUID<input value={values.actorId} onChange={event => set('actorId', event.target.value)} /></label><label>From (Manila)<input type="date" value={values.from} onChange={event => set('from', event.target.value)} /></label><label>To (Manila)<input type="date" value={values.to} onChange={event => set('to', event.target.value)} /></label><button className="admin-secondary">Apply filters</button><button className="admin-secondary" type="button" onClick={() => onApply(new URLSearchParams())}>Clear filters</button></form>{error && <p className="error-message" role="alert">{error}</p>}</>;
+  return <><form className="filter-bar admin-filters audit-filters" onSubmit={apply}>
+    <label>Action<select value={values.action} onChange={event => set('action', event.target.value)}><option value="">All actions</option>{Object.entries(actionLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+    <label>Student UUID<input placeholder="All students" value={values.studentId} onChange={event => set('studentId', event.target.value)} /></label>
+    <label>Actor UUID<input placeholder="All administrators" value={values.actorId} onChange={event => set('actorId', event.target.value)} /></label>
+    <label>From (Manila)<input type="date" value={values.from} onChange={event => set('from', event.target.value)} /></label>
+    <label>To (Manila)<input type="date" value={values.to} onChange={event => set('to', event.target.value)} /></label>
+    <div className="audit-filter-actions"><button className="admin-secondary"><SlidersHorizontal size={15} aria-hidden="true" />Apply filters</button><button className="admin-secondary" type="button" onClick={() => onApply(new URLSearchParams())}><RotateCcw size={15} aria-hidden="true" />Clear filters</button></div>
+  </form>{error && <p className="error-message" role="alert">{error}</p>}</>;
 }
 
 export function AuditLogs({ search, navigate }: { search: string; navigate: (path: string) => void }) {

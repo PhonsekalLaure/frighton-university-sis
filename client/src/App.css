@@ -181,21 +181,21 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .student-photo-field .student-photo-preview { margin: 0; }
 
 /* Directory controls share the console's navy, warm borders, and teal focus. */
-.student-filters { gap: 14px 12px; padding: 18px; border: 1px solid #e2dfd8; border-radius: 8px; background: #fbfaf7; }
-.student-filters > label { flex: 1 1 140px; color: #526078; font-size: 11px; font-weight: 700; }
-.student-filters > .student-search-field { flex: 2 1 270px; }
-.student-filters input, .student-filters select { width: 100%; min-width: 0; height: 40px; border: 1px solid #d9d8d3; border-radius: 5px; padding: 0 11px; color: #33415e; background-color: #fff; font: inherit; font-size: 12px; font-weight: 400; transition: border-color .15s, box-shadow .15s; }
-.student-filters input::placeholder { color: #8a93a0; }
+.admin-filters { gap: 14px 12px; padding: 18px; border: 1px solid #e2dfd8; border-radius: 8px; background: #fbfaf7; }
+.admin-filters > label { flex: 1 1 140px; color: #526078; font-size: 11px; font-weight: 700; }
+.admin-filters > .student-search-field { flex: 2 1 270px; }
+.admin-filters input, .admin-filters select { width: 100%; min-width: 0; height: 40px; border: 1px solid #d9d8d3; border-radius: 5px; padding: 0 11px; color: #33415e; background-color: #fff; font: inherit; font-size: 12px; font-weight: 400; transition: border-color .15s, box-shadow .15s; }
+.admin-filters input::placeholder { color: #8a93a0; }
 .student-search-control { position: relative; display: flex; align-items: center; }
 .student-search-control > svg { position: absolute; left: 12px; color: #7d8794; pointer-events: none; }
 .student-search-control input { padding-left: 36px; }
-.student-filters > button { min-height: 40px; white-space: nowrap; }
+.admin-filters > button { min-height: 40px; white-space: nowrap; }
 .admin-shell select, .admin-modal select { appearance: none; padding-right: 34px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23526078' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-position: right 10px center; background-repeat: no-repeat; font-family: inherit; cursor: pointer; }
 .admin-shell select option, .admin-modal select option { color: #33415e; background: #fff; }
 .admin-form label, .admin-shell .statement-selector { font-size: 12px; font-weight: 600; }
 .admin-form input, .admin-form select { min-width: 0; width: 100%; font-family: inherit; font-weight: 400; }
-.student-filters input:hover, .student-filters select:hover, .admin-form input:hover:not(:disabled), .admin-form select:hover:not(:disabled), .admin-shell .pagination select:hover, .admin-shell .statement-selector select:hover { border-color: #a3afa9; }
-.student-filters input:focus-visible, .student-filters select:focus-visible, .admin-form input:focus-visible, .admin-form select:focus-visible, .admin-shell .pagination select:focus-visible, .admin-shell .statement-selector select:focus-visible { outline: 2px solid #4a7e78; outline-offset: 2px; border-color: #4a7e78; box-shadow: 0 0 0 3px #4a7e7814; }
+.admin-filters input:hover, .admin-filters select:hover, .admin-form input:hover:not(:disabled), .admin-form select:hover:not(:disabled), .admin-shell .pagination select:hover, .admin-shell .statement-selector select:hover { border-color: #a3afa9; }
+.admin-filters input:focus-visible, .admin-filters select:focus-visible, .admin-form input:focus-visible, .admin-form select:focus-visible, .admin-shell .pagination select:focus-visible, .admin-shell .statement-selector select:focus-visible { outline: 2px solid #4a7e78; outline-offset: 2px; border-color: #4a7e78; box-shadow: 0 0 0 3px #4a7e7814; }
 .admin-form input:disabled, .admin-form select:disabled { color: #7d8794; background-color: #f3f2ed; cursor: not-allowed; }
 .admin-form small { color: #7d8794; font-size: 11px; line-height: 1.6; }
 .student-photo-field input[type="file"] { height: auto; padding: 7px; color: #647089; background: #fbfaf7; }
@@ -214,6 +214,29 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .admin-secondary:hover:not(:disabled), .pagination button:hover:not(:disabled) { border-color: #9caaa4; background: #f3f6f2; }
 .danger-button:hover:not(:disabled) { border-color: #b66a58; background: #faeae4; }
 .admin-shell .record-tabs button { font: inherit; font-size: 12px; }
+.audit-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.audit-filters input { width: 100%; }
+.audit-filter-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 40px; }
+.audit-filter-actions button { min-height: 40px; }
+.audit-filters input[type="date"] { color-scheme: light; }
+.audit-filters input[type="date"]::-webkit-calendar-picker-indicator { opacity: .6; cursor: pointer; }
+.audit-log-card { padding: 8px; }
+.audit-log-card .audit-event { border-bottom-color: #eeeae3; }
+.audit-log-card .audit-event:last-child { border-bottom: 0; }
+.audit-log-card .audit-event-heading { padding: 16px 14px; border-radius: 5px; transition: background-color .15s; }
+.audit-log-card .audit-event-heading:hover { background: #f7f8f3; }
+.audit-log-card .audit-event-heading[aria-expanded="true"] { background: #f0f5f1; }
+.audit-log-card .audit-event-heading > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.audit-log-card .audit-event-heading small { line-height: 1.6; }
+.audit-log-card .audit-event-heading > span:last-child { color: #647089; }
+.audit-log-card .audit-event-heading > span:last-child svg { flex-shrink: 0; color: #4a7e78; }
+.audit-log-card .change-list { gap: 10px; margin: 0 14px 14px; padding: 16px; border: 1px solid #e2dfd8; border-radius: 6px; background: #fbfaf7; font-size: 12px; line-height: 1.6; }
+.audit-log-card .change-list p { margin: 0; }
+.audit-log-card .change-list > div { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 3fr); gap: 12px; padding-top: 10px; border-top: 1px solid #e8e5de; }
+.audit-log-card .change-list strong { width: auto; color: #647089; }
+@media (max-width: 900px) {
+  .audit-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @supports (appearance: base-select) {
   .admin-shell select, .admin-modal select, .admin-shell select::picker(select), .admin-modal select::picker(select) { appearance: base-select; }
   .admin-shell select, .admin-modal select { background-image: none; padding-right: 11px; align-items: center; }
@@ -225,9 +248,13 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .admin-shell select option:checked, .admin-modal select option:checked { background: #e7f0e9; color: #1c5e61; font-weight: 600; }
 }
 @media (max-width: 680px) {
-  .student-filters { padding: 14px; }
-  .student-filters > label, .student-filters > .student-search-field { flex-basis: 100%; }
-  .student-filters > button { width: 100%; }
+  .audit-filters { grid-template-columns: minmax(0, 1fr); }
+  .audit-filter-actions button { flex: 1 1 140px; }
+  .audit-log-card .change-list { margin: 0 6px 10px; padding: 12px; }
+  .audit-log-card .change-list > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .admin-filters { padding: 14px; }
+  .admin-filters > label, .admin-filters > .student-search-field { flex-basis: 100%; }
+  .admin-filters > button { width: 100%; }
   .admin-shell .pagination { justify-content: flex-start; }
   .admin-shell .pagination > span { flex-basis: 100%; }
   .admin-modal { padding: 20px; }
