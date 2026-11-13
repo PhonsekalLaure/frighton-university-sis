@@ -5,14 +5,15 @@ import { accountFeedback, uncertainOutcome } from '../../lib/accountFeedback';
 import { useApiRead } from '../../lib/useApiRead';
 import { useCooldown } from '../../lib/useCooldown';
 import { timestamp } from '../../lib/format';
-import type { StudentDetail as DetailData } from '../../types/admin';
+import type { InvitationDelivery, StudentDetail as DetailData } from '../../types/admin';
 import { LoadingState } from '../PageStates';
 import { BillingRecords, GradeRecords, ScheduleRecords } from '../RecordViews';
 import { DashboardRecords } from '../../pages/DashboardPage';
 import { HoldsRecords } from '../../pages/HoldsPage';
 import { StudentForm } from './StudentForm';
 import { Failure } from './shared';
-import { initials } from '../../lib/adminConstants';
+import { StudentAvatar } from '../StudentAvatar';
+import { invitationFeedback } from '../../lib/invitationFeedback';
 
 const tabs = ['Overview', 'Schedule', 'Grades', 'Holds', 'Billing'] as const;
 export function StudentDetail({ id, search, navigate }: { id: string; search: string; navigate: (path: string) => void }) {
@@ -54,10 +55,11 @@ export function StudentDetail({ id, search, navigate }: { id: string; search: st
     inFlight.current = true; setBusy(true); setNotice('');
     let accepted = false;
     try {
-      await apiPost(`/api/v1/admin/students/${id}/${path}`, {});
+      const result = await apiPost<{ invitation?: InvitationDelivery }>(`/api/v1/admin/students/${id}/${path}`, {});
       accepted = true;
       if (emailAction) cooldown.wait(60);
-      await reload(); setNotice(message);
+      // The refreshed record already renders the persisted invitation outcome.
+      await reload(); setNotice(result?.invitation ? '' : message);
     } catch (caught) {
       const error = caught as ApiFailure;
       cooldown.wait(error.retryAfter);
@@ -72,15 +74,17 @@ export function StudentDetail({ id, search, navigate }: { id: string; search: st
   if (!data) return <LoadingState />;
   const { student } = data;
   const auth = student.auth;
+  const invitationBlocked = Boolean(student.invitation && !student.invitation.canRetry);
   const locked = busy || form || needsReview || cooldown.remaining > 0;
   return <div className="admin-content">{back}
-    <div className="detail-header"><div className="profile-avatar large">{initials(student.fullName)}</div><div><p className="eyebrow">STUDENT PROFILE</p><h1>{student.fullName}</h1><p className="supporting-copy">{student.studentNumber} · {student.email}</p><div className="detail-tags"><span className={`status-tag ${student.academicStatus}`}>{student.academicStatus}</span><span className={`status-tag ${student.isActive ? 'active' : 'inactive'}`}>{student.isActive ? 'Access active' : 'Access inactive'}</span></div></div>
+    <div className="detail-header"><StudentAvatar className="large" src={student.avatarUrl} name={student.fullName} /><div><p className="eyebrow">STUDENT PROFILE</p><h1>{student.fullName}</h1><p className="supporting-copy">{student.studentNumber} · {student.email}</p><div className="detail-tags"><span className={`status-tag ${student.academicStatus}`}>{student.academicStatus}</span><span className={`status-tag ${student.isActive ? 'active' : 'inactive'}`}>{student.isActive ? 'Access active' : 'Access inactive'}</span></div></div>
       <div className="detail-actions"><button className="admin-secondary" disabled={locked} onClick={event => { setFormOpener(event.currentTarget); setForm(true); }}><Pencil size={15} />Edit profile</button><button className={student.isActive ? 'danger-button' : 'admin-primary'} disabled={locked} onClick={() => { void action(student.isActive ? 'deactivate' : 'reactivate', student.isActive ? 'Access deactivated.' : 'Access reactivated.'); }}>{student.isActive ? 'Deactivate' : 'Reactivate'}</button></div></div>
     {notice && <p className="admin-notice" role="status">{notice}</p>}
     {cooldown.remaining > 0 && <p role="status">Try again in {cooldown.remaining} seconds.</p>}
     {needsReview && <button className="admin-secondary" disabled={busy} onClick={review}>Refresh and review record</button>}
     <div className="detail-grid"><section className="admin-card"><p className="eyebrow">ACCOUNT ACTIVITY</p><h2>Authentication status</h2>{auth ? <dl className="admin-details"><div><dt>Invitation</dt><dd>{timestamp(auth.invitedAt)}</dd></div><div><dt>Email confirmed</dt><dd>{timestamp(auth.emailConfirmedAt)}</dd></div><div><dt>Last sign in</dt><dd>{timestamp(auth.lastSignInAt)}</dd></div></dl> : <div className="warning-box">Authentication identity is unavailable. Email actions are disabled pending review.</div>}
-      {auth && student.isActive && <div className="action-row">{auth.invitedAt && !auth.emailConfirmedAt && <button className="admin-secondary" disabled={locked || mailReview} onClick={() => { void action('invitation-resend', 'Invitation requested.'); }}><Mail size={15} />Resend invitation</button>}{auth.emailConfirmedAt && <button className="admin-secondary" disabled={locked || mailReview} onClick={() => { void action('password-recovery', 'Recovery instructions requested.'); }}><Mail size={15} />Send recovery instructions</button>}</div>}</section>
+      {student.invitation && !auth?.emailConfirmedAt && <p className="admin-notice" role="status">{invitationFeedback(student.invitation)}</p>}
+      {auth && student.isActive && <div className="action-row">{auth.invitedAt && !auth.emailConfirmedAt && <button className="admin-secondary" disabled={locked || mailReview || invitationBlocked} onClick={() => { void action('invitation-resend', 'Invitation requested.'); }}><Mail size={15} />{student.invitation?.status === 'queued' || student.invitation?.status === 'failed' ? 'Send invitation' : 'Resend invitation'}</button>}{auth.emailConfirmedAt && <button className="admin-secondary" disabled={locked || mailReview} onClick={() => { void action('password-recovery', 'Recovery instructions requested.'); }}><Mail size={15} />Send recovery instructions</button>}</div>}</section>
       <section className="admin-card"><p className="eyebrow">PROFILE</p><h2>Academic profile</h2><dl className="admin-details"><div><dt>Department</dt><dd>{student.department || 'Not set'}</dd></div><div><dt>Program</dt><dd>{student.program || 'Not set'}</dd></div><div><dt>Year level</dt><dd>{student.yearLevel ?? 'Not set'}</dd></div><div><dt>Created</dt><dd>{timestamp(student.createdAt)}</dd></div></dl></section></div>
     <div className="record-tabs" role="tablist" aria-label="Student records">{tabs.map(value => <button key={value} id={`tab-${value}`} role="tab" aria-selected={value === tab} aria-controls="student-record-panel" tabIndex={value === tab ? 0 : -1} onClick={() => chooseTab(value)} onKeyDown={event => {
       const index = tabs.indexOf(value);

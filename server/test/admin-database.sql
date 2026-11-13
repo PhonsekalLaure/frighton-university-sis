@@ -3,7 +3,7 @@
 DO $admin_tests$
 DECLARE
   actor uuid := gen_random_uuid(); student uuid := gen_random_uuid(); student2 uuid := gen_random_uuid();
-  actor_email text; email1 text; email2 text; number1 text; op uuid; event_count integer;
+  actor_email text; email1 text; email2 text; number1 text; search_name text; op uuid; event_count integer;
   payload jsonb; result jsonb; before_dashboard jsonb; after_dashboard jsonb; baseline_logs bigint;
   signed_avatar1 text := 'https://example.invalid/avatar.png?token=REVIEW_ONLY_CREATE#REVIEW_ONLY_FRAGMENT';
   signed_avatar2 text := 'https://example.invalid/avatar.png?token=REVIEW_ONLY_EDIT#REVIEW_ONLY_FRAGMENT';
@@ -11,7 +11,7 @@ BEGIN
   actor_email := 'sis-admin-test-'||actor||'@example.invalid';
   email1 := 'sis-student-test-'||student||'@example.invalid';
   email2 := 'sis-student-test-'||student2||'@example.invalid';
-  number1 := 'STU-9999-'||floor(random()*1000000000000)::text;
+  search_name := 'Name-'||actor;
   INSERT INTO public.users(users_id,first_name,last_name,email,password,role,is_active)
     VALUES(actor,'Test','Administrator',actor_email,'[MANAGED_BY_SUPABASE_AUTH]','Admin',true);
   ASSERT NOT EXISTS(SELECT 1 FROM public.profiles WHERE id=actor),'Shared admin has no student profile';
@@ -25,12 +25,14 @@ BEGIN
   INSERT INTO auth.users(id,email,invited_at,created_at) VALUES(student,email1,now(),now()),(student2,email2,now(),now());
   ASSERT public.admin_student_auth(actor,email1)->>'id'=student::text,'Auth identity lookup';
   ASSERT public.admin_student_auth(actor,'absent-'||actor||'@example.invalid') IS NULL,'Missing Auth identity';
-  payload := jsonb_build_object('studentNumber',number1,'firstName','Same','lastName','Name','middleName','A',
+  payload := jsonb_build_object('firstName','Same','lastName',search_name,'middleName','A',
     'email',email1,'department','Test department','program','Test program','yearLevel',1,'academicStatus','probation',
     'avatarUrl',signed_avatar1);
   op := gen_random_uuid();
   result := public.admin_write_student(actor,student,op,'student.account.created',payload);
   ASSERT result->>'email'=email1,'Creation returns student snapshot';
+  number1 := result->>'studentNumber';
+  ASSERT number1 ~ ('^STU-'||to_char(clock_timestamp() AT TIME ZONE 'Asia/Manila','YYYY')||'-[0-9]{4,}$'),'Student number is generated for the current Manila year';
   ASSERT result->>'avatarUrl'=signed_avatar1,'Account response preserves the signed profile URL';
   ASSERT (SELECT avatar_url=signed_avatar1 FROM public.profiles WHERE id=student),'Profile preserves the signed URL';
   ASSERT (SELECT target->>'avatarUrl'='https://example.invalid/avatar.png' AND
@@ -47,25 +49,26 @@ BEGIN
   ASSERT NOT EXISTS(SELECT 1 FROM public.admin_audit_logs a WHERE id=op AND
     (a.changes ? 'password' OR a.target ? 'password' OR a.actor ? 'password')),'Audit uses sanitized snapshots';
 
-  -- Duplicate student numbers roll back the directory insert and audit together.
+  -- Older deployed servers may still supply numbers during migration rollout.
+  -- A duplicate must roll back directory/profile/audit changes together.
   BEGIN
-    PERFORM public.admin_write_student(actor,student2,gen_random_uuid(),'student.account.created',payload||jsonb_build_object('email',email2));
-    RAISE EXCEPTION 'Expected duplicate student number failure';
+    PERFORM public.admin_write_student(actor,student2,gen_random_uuid(),'student.account.created',payload||jsonb_build_object('email',email2,'studentNumber',number1));
+    RAISE EXCEPTION 'Expected duplicate student number rejection';
   EXCEPTION WHEN unique_violation THEN NULL; END;
   ASSERT NOT EXISTS(SELECT 1 FROM public.users WHERE users_id=student2),'Failed creation left no directory record';
   ASSERT (SELECT count(*) FROM public.admin_audit_logs)=baseline_logs+1,'Failed creation left no audit record';
 
   -- A second student exercises filters, unique ordering, and distinct hold counts.
   PERFORM public.admin_write_student(actor,student2,gen_random_uuid(),'student.account.created',payload||
-    jsonb_build_object('studentNumber',number1||'1','email',email2,'academicStatus','active'));
+    jsonb_build_object('email',email2,'academicStatus','active'));
   INSERT INTO public.student_holds(student_id,hold_type,reason) VALUES
     (student,'disciplinary','Test hold'),(student,'disciplinary','Second test hold');
-  result := public.admin_list_students(actor,jsonb_build_object('q',number1,'page',1,'pageSize',1));
+  result := public.admin_list_students(actor,jsonb_build_object('q',search_name,'page',1,'pageSize',1));
   ASSERT (result->>'total')::integer=2 AND jsonb_array_length(result->'items')=1,'Search and page size';
   ASSERT result->'items'->0->>'id'=least(student,student2)::text,'UUID resolves identical-name ordering';
-  result := public.admin_list_students(actor,jsonb_build_object('q',number1,'academicStatus','probation','department','test department'));
+  result := public.admin_list_students(actor,jsonb_build_object('q',search_name,'academicStatus','probation','department','test department'));
   ASSERT (result->>'total')::integer=1 AND (result->'items'->0->>'activeHoldCount')::integer=2,'Combined filters and hold count';
-  result := public.admin_list_students(actor,jsonb_build_object('q',number1,'page',5,'pageSize',25));
+  result := public.admin_list_students(actor,jsonb_build_object('q',search_name,'page',5,'pageSize',25));
   ASSERT result->'items'='[]'::jsonb AND (result->>'total')::integer=2,'Out-of-range page retains total';
   result := public.admin_list_students(actor,jsonb_build_object('q','no-such-student-'||actor));
   ASSERT result->'items'='[]'::jsonb AND (result->>'total')::integer=0,'Empty search';
@@ -123,7 +126,7 @@ BEGIN
   op := gen_random_uuid(); PERFORM public.admin_begin_student_change(actor,student,op);
   PERFORM public.admin_write_student(actor,student,op,'student.access.deactivated','{}');
   ASSERT (SELECT count(*) FROM public.admin_audit_logs)=event_count,'Already inactive has no duplicate event';
-  result := public.admin_list_students(actor,jsonb_build_object('q',number1,'accessStatus','inactive'));
+  result := public.admin_list_students(actor,jsonb_build_object('q',search_name,'accessStatus','inactive'));
   ASSERT (result->>'total')::integer=1,'Inactive filter';
   op := gen_random_uuid(); PERFORM public.admin_begin_student_change(actor,student,op);
   PERFORM public.admin_write_student(actor,student,op,'student.access.reactivated','{}');

@@ -1,9 +1,11 @@
-import { Router, type Request, type RequestHandler } from 'express';
+import { Router, raw, type Request, type RequestHandler } from 'express';
 import { requireAuth, requireAdmin } from '../middlewares/auth.js';
 import { AdminService } from '../services/adminService.js';
 import { emptyBody, filters, studentInput, uuid } from '../services/adminValidation.js';
+import { StudentPhotoService, studentPhotoLimit } from '../services/studentPhotoService.js';
 
-export function createAdminRouter(service: AdminService = new AdminService(), authenticate: RequestHandler = requireAuth) {
+export function createAdminRouter(service: AdminService = new AdminService(), authenticate: RequestHandler = requireAuth,
+  photos: StudentPhotoService = new StudentPhotoService()) {
   const router = Router();
   router.use(authenticate, requireAdmin);
   const handle = (work: (req: Request, actorId: string) => Promise<unknown>, status = 200): RequestHandler =>
@@ -11,6 +13,8 @@ export function createAdminRouter(service: AdminService = new AdminService(), au
       try { res.status(status).json(await work(req, res.locals.user.id)); } catch (error) { next(error); }
     };
   router.get('/dashboard', handle((_req, actor) => service.dashboard(actor)));
+  router.post('/student-photos', raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: studentPhotoLimit }),
+    handle((req, actor) => photos.upload(actor, req.body, req.get('content-type')?.split(';')[0].trim().toLowerCase() ?? ''), 201));
   router.get('/students', handle((req, actor) => service.students(actor, filters(req.query))));
   router.post('/students', handle((req, actor) => service.create(actor, studentInput(req.body, true)), 201));
   router.get('/students/:studentId', handle((req, actor) => service.detail(actor, uuid(req.params.studentId))));

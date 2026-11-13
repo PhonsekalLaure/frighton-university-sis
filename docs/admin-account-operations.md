@@ -30,6 +30,26 @@ The database test uses synthetic records inside `BEGIN ... ROLLBACK`; it is not 
 
 ## Email readiness and staged templates
 
+### SIS invitation delivery after account commit
+
+Initial student invitations and resends use the SMTP sender already configured in Supabase Auth. No additional SMTP credentials, encryption key, email library, or worker deployment is required in SIS.
+
+Creation first calls `generateLink(type: invite)` to create an unconfirmed Auth identity without sending email. That initial link is discarded. `admin_queue_student_invitation` then commits the directory record, student profile, generated number, creation audit event, and pending delivery request in one transaction. Only a confirmed commit permits the server to call `inviteUserByEmail` for that existing unconfirmed identity. Supabase generates a fresh token and sends it through its configured email service. SIS never persists invitation tokens.
+
+Creation verifies the unique provisioning-operation marker, matching email, and unconfirmed invitation before saving the student. Ownership does not depend on matching application/Auth clock times. An identity mismatch blocks another submission in the retained form until the account has been reviewed.
+
+Apply `20261112000200_sis_invitation_delivery.sql` before running the updated API. `npm.cmd run admin:invitation-check -w server` checks the password-page URL and migration presence without generating identities or sending email. Missing migration readiness rejects creation before Auth provisioning. The check does not certify shared email-template configuration or inbox delivery; use the readiness checks and authorized mailbox test below.
+
+The Supabase Invite user template must direct the exact SIS `CLIENT_URL`-derived redirect to `/set-password?token_hash={{ .TokenHash }}&type=invite`, preserving the complete existing template for all other redirects. Opening the SIS page captures/scrubs the token; only password submission verifies it. Merely changing creation order does not fix default verification links that consume the token on GET. Configure HTTPS in production, deploy the password page, and verify the exact redirect allowlist. Do not change the shared Site URL, SMTP credentials, password policy, or LMS behavior.
+
+Account creation returns `201 { student, invitation }` even if post-commit email delivery fails. Delivery states are `queued`, `sending`, `accepted`, `failed`, and `unknown`. Acceptance means the invitation API accepted the send, not that the email reached the inbox. Definitive provider rejection preserves the saved student and permits a deliberate retry. A lost response or mismatched returned Auth identity becomes unknown and blocks further invitations across refreshes and API restarts. Retrying a lost delivery-status write never repeats the email call.
+
+An account-change lease serializes dispatch with profile/email/access edits. A process interrupted during a send leaves a claim that becomes unknown after five minutes. Each SIS API process checks stale claims at startup and once per minute; status reads also expire the selected student's stale claim. Maintenance sends no emails. Queued requests remain recoverable because the eventual send generates a fresh token. Delivery records contain only identifiers/status/timestamps, are private, and cascade away when student profiles are reset.
+
+Retrying from the saved student's detail page verifies its existing unconfirmed Auth identity, applies the existing cooldown, and commits the resend-request audit and pending delivery before calling Supabase. It creates no second student or number. `student.invitation.resent` records the committed resend request, not delivery success. Confirmed students use recovery. Existing orphan identities are not automatically adopted, deleted, repaired, or emailed.
+
+### Shared Supabase recovery/template readiness
+
 `admin:auth-check` is read-only. With a `SUPABASE_ACCESS_TOKEN` supplied privately to the process, it reads the Management API and prints only safe booleans: exact redirect allowlisting, SMTP metadata presence, compatible password-length bounds, configured link expiry, and SIS-specific template markers. It never prints the token, SMTP credentials, raw configuration, or email templates. Exit `0` means inspected settings passed; `1` means a check failed; `2` means configuration is unverified/inaccessible. SMTP metadata does not prove working credentials or inbox delivery. Without Management API access, inspect the same settings manually in the dashboard. The service-role key alone cannot inspect project Auth configuration.
 
 The template draft command does not fetch or apply settings. It emits wrappers containing explicit `__EXISTING_*_TEMPLATE_BODY__` placeholders. At deployment, use the **complete current** invitation/recovery body as each fallback; do not deploy the literal placeholders. `buildSISPasswordTemplate` preserves that body byte-for-byte in its `else` branch. Match the exact `CLIENT_URL`-derived `/set-password` redirect, not a wildcard, user metadata, or a caller-provided URL. Existing LMS/non-SIS links must continue using their original template bodies. Do not change the shared Site URL, other templates, SMTP credentials, or password policy as a side effect.
@@ -60,7 +80,7 @@ Every corrective write requires explicit operator authorization for the exact ta
 
 ## Opt-in live mailbox smoke test
 
-This is a **manual checklist**, not part of `npm test`. Obtain explicit approval for a dedicated disposable mailbox, a unique valid student number, the environment, email sends, and any later cleanup. Never use a real student's account. Stop if custom SMTP, shared-template preservation, or the deployed password page is unverified.
+This is a **manual checklist**, not part of `npm test`. Obtain explicit approval for a dedicated disposable mailbox, the environment, email sends, and any later cleanup. The database assigns a student number when creation succeeds. Never use a real student's account. Stop if custom SMTP, shared-template preservation, or the deployed password page is unverified.
 
 1. Confirm the linked/configured project, deployed API/frontend origin, exact redirect allowlist, staged templates, SMTP sender readiness, and provider password policy. Confirm the non-SIS template branch remains unchanged.
 2. As an authorized admin, create the approved test student. Verify one directory/profile pair, one creation event, and an invitation received at the approved mailbox. Do not copy its link into terminal arguments or shared logs.

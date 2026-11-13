@@ -13,11 +13,11 @@ export type AuditAction = typeof auditActions[number];
 export interface StudentInput {
   firstName?: string; middleName?: string | null; lastName?: string; email?: string;
   department?: string | null; program?: string | null; yearLevel?: number | null;
-  academicStatus?: typeof academicStatuses[number]; avatarUrl?: string | null; studentNumber?: string;
+  academicStatus?: typeof academicStatuses[number]; avatarUrl?: string | null;
 }
 const limits: Record<string, number> = {
   firstName: 100, middleName: 100, lastName: 100, email: 254, department: 100, program: 150,
-  avatarUrl: 2048, studentNumber: 50, q: 100,
+  avatarUrl: 2048, q: 100,
 };
 export function uuid(value: unknown, field = 'studentId'): string {
   if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
@@ -41,12 +41,11 @@ function object(value: unknown): Record<string, unknown> {
 export function studentInput(body: unknown, creating = false): StudentInput {
   const source = object(body);
   const allowed = ['firstName', 'middleName', 'lastName', 'email', 'department', 'program', 'yearLevel', 'academicStatus', 'avatarUrl'];
-  if (creating) allowed.push('studentNumber');
   if (Object.keys(source).some(key => !allowed.includes(key))) throw new AdminError(400, 'Unknown or immutable student field.');
   if (!Object.keys(source).length) throw new AdminError(400, 'Provide at least one profile field.');
-  if (creating && ['firstName', 'lastName', 'email', 'studentNumber', 'department', 'program', 'yearLevel', 'academicStatus']
+  if (creating && ['firstName', 'lastName', 'email', 'department', 'program', 'yearLevel', 'academicStatus']
     .some(key => source[key] === undefined || source[key] === null || source[key] === '')) {
-    throw new AdminError(400, 'Name, email, student number, department, program, year level, and academic status are required.');
+    throw new AdminError(400, 'Name, email, department, program, year level, and academic status are required.');
   }
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(source)) {
@@ -65,9 +64,6 @@ export function studentInput(body: unknown, creating = false): StudentInput {
   if (result.email !== undefined) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(result.email))) throw new AdminError(400, 'Enter a valid email address.');
     result.email = String(result.email).toLowerCase();
-  }
-  if (result.studentNumber !== undefined && !/^STU-\d{4}-\d{4,}$/.test(String(result.studentNumber))) {
-    throw new AdminError(400, 'studentNumber must match STU-YYYY-NNNN or a longer numeric sequence.');
   }
   if (result.avatarUrl) {
     try {

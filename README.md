@@ -52,7 +52,13 @@ These destructive commands are for disposable development databases. Stop both A
 
 The `20261101000000_shared_admin_directory.sql` migration removes obsolete admin profiles only when no conflicting student records exist and makes SIS admin permissions use the shared directory. A full reseed is unnecessary for that correction.
 
+Student creation now assigns its student number automatically and accepts an optional photo file (JPEG, PNG, or WebP, up to 2 MB). Apply `20261112000000_generated_student_numbers.sql` and `20261112000100_student_photo_storage.sql` to the verified SIS project before deploying this application change. The first migration initializes yearly counters from existing profiles and preserves older-server creation compatibility; the second creates the photo storage bucket. Existing student numbers and photos are preserved. Local server tests exercise the migrations and account lifecycle in an isolated PostgreSQL engine without sending emails.
+
 ## Contracts and operations
+
+SIS student creation generates an Auth identity without sending email, commits the student profile/number/audit and pending delivery together, then asks Supabase to send through its existing SMTP setup. Apply `20261112000200_sis_invitation_delivery.sql` and run `npm.cmd run admin:invitation-check -w server`. No new SMTP credentials or encryption key are needed. Delivery failure preserves the saved student and exposes retry/review status in the admin detail page. Verify the SIS-specific password-page email template before live use. See [invitation operations](docs/admin-account-operations.md#sis-invitation-delivery-after-account-commit).
+
+Before applying these pending migrations, the guarded database regression check can preview the complete bundle inside a rollback transaction: `npm.cmd run test:admin-db -w server -- --preview-migration 20261112000000_generated_student_numbers.sql 20261112000100_student_photo_storage.sql 20261112000200_sis_invitation_delivery.sql`. Once applied, run `npm.cmd run test:admin-db -w server` without preview arguments.
 
 - [Page architecture](docs/sis-page-architecture.md)
 - [Administrator client contract](docs/admin-frontend-handoff.md)

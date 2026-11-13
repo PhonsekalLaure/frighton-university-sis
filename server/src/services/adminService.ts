@@ -9,6 +9,7 @@ import { getBilling } from './billingService.js';
 import { getHolds } from './holdsService.js';
 import { AdminError, type AuditAction, type StudentInput } from './adminValidation.js';
 import { AccountError, reserveAccountRequest } from './accountRateLimit.js';
+import type { InvitationDelivery } from './invitationDelivery.js';
 
 type Row = Record<string, any>;
 type Client = Pick<SupabaseClient, 'rpc' | 'from' | 'auth'>;
@@ -68,13 +69,14 @@ export class AdminService {
   async detail(actorId: string, studentId: string) {
     const student = await this.student(actorId, studentId);
     try {
-      const [auth, dashboard, schedule, grades, holds, billing] = await Promise.all([
+      const [auth, dashboard, schedule, grades, holds, billing, invitation] = await Promise.all([
         this.authIdentity(actorId, student.email), getDashboard(studentId, this.client),
         getSchedule(studentId, this.client), getGrades(studentId, this.client),
         getHolds(studentId, this.client), getBilling(studentId, this.client),
+        this.rpc('admin_invitation_status', { p_actor_id: actorId, p_student_id: studentId }),
       ]);
       return { student: { ...student, auth: auth ? { invitedAt: auth.invitedAt,
-        emailConfirmedAt: auth.emailConfirmedAt, lastSignInAt: auth.lastSignInAt } : null },
+        emailConfirmedAt: auth.emailConfirmedAt, lastSignInAt: auth.lastSignInAt } : null, invitation },
       dashboard, schedule, grades, holds, billing };
     } catch { throw new AdminError(503, 'Unable to load the complete student record. Please try again.'); }
   }
@@ -98,10 +100,9 @@ export class AdminService {
       throw databaseError(null);
     }
   }
-  private async checkDuplicates(email: string, studentNumber?: string, excludingId?: string) {
+  private async checkDuplicates(email: string, excludingId?: string) {
     const queries = [this.client.from('users').select('users_id').ilike('email', escapedEmail(email)),
       this.client.from('profiles').select('id').ilike('email', escapedEmail(email))];
-    if (studentNumber) queries.push(this.client.from('profiles').select('id').eq('student_number', studentNumber));
     try {
       for (const query of queries) {
         const { data, error } = await query;
@@ -115,13 +116,15 @@ export class AdminService {
       throw databaseError(null);
     }
   }
-  private async write(actorId: string, studentId: string, operationId: string, action: AuditAction, values: StudentInput = {}) {
+  private async write(actorId: string, studentId: string, operationId: string, action: AuditAction, values: StudentInput = {},
+    invitation?: { authId: string }) {
     const params = { p_actor_id: actorId, p_student_id: studentId, p_operation_id: operationId,
       p_action: action, p_values: values };
     let uncertain = false;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const student = await this.rpc('admin_write_student', params);
+        const student = await this.rpc(invitation ? 'admin_queue_student_invitation' : 'admin_write_student', invitation
+          ? { ...params, p_auth_id: invitation.authId } : params);
         // A replay returns an audit snapshot, whose URLs are deliberately redacted.
         return attempt === 0 ? student : await this.committedStudent(actorId, studentId);
       }
@@ -151,42 +154,51 @@ export class AdminService {
     }
   }
   async create(actorId: string, input: StudentInput) {
-    await this.checkDuplicates(input.email!, input.studentNumber);
+    await this.checkDuplicates(input.email!);
     if (await this.authIdentity(actorId, input.email!)) throw new AdminError(409, 'An authentication account already uses this email.');
+    await this.rpc('admin_invitation_ready', { p_actor_id: actorId });
     await reserveAccountRequest('admin_mail', input.email!, actorId, this.client);
     const operationId = randomUUID();
-    const startedAt = Date.now();
     let user;
     try {
-      const { data, error } = await this.client.auth.admin.inviteUserByEmail(input.email!, {
-        redirectTo: new URL('/set-password', config.clientUrl).toString(),
-        data: { first_name: input.firstName, last_name: input.lastName, sis_provisioning_operation_id: operationId },
+      const { data, error } = await this.client.auth.admin.generateLink({
+        type: 'invite', email: input.email!, options: {
+          redirectTo: new URL('/set-password', config.clientUrl).toString(),
+          data: { first_name: input.firstName, last_name: input.lastName, sis_provisioning_operation_id: operationId },
+        },
       });
       if (error || !data.user) {
         if (['email_exists', 'user_already_exists', 'email_already_registered'].includes(error?.code ?? '')) {
           throw new AdminError(409, 'An authentication account already uses this email.');
         }
-        if (error?.status === 429) throw new AccountError(429, 'rate_limited', 'The email service is busy. Try again later.', 60);
+        if (error?.status === 429) throw new AccountError(429, 'rate_limited', 'Authentication is busy. Try again later.', 60);
         if (error?.status && error.status >= 400 && error.status < 500) {
-          throw new AccountError(503, 'email_rejected', 'Unable to invite the student. Check authentication email configuration.');
+          throw new AccountError(503, 'provisioning_rejected', 'Unable to generate the student invitation. No email was sent.');
         }
         throw new Error('Uncertain invitation response');
       }
+      if (!data.properties || data.properties.verification_type !== 'invite' ||
+        !/^[a-zA-Z0-9_-]{20,256}$/.test(data.properties.hashed_token)) throw new Error('Incomplete generated invitation.');
+      // This first link is never emailed or persisted. Supabase creates a fresh
+      // token when inviteUserByEmail is called after the student commit.
       user = data.user;
     } catch (error) {
       if (error instanceof AdminError || error instanceof AccountError) throw error;
-      console.error('SIS invitation delivery requires review', { operationId });
-      throw new AccountError(503, 'email_delivery_unknown', 'The invitation could not be confirmed. Check the account before retrying.');
+      console.error('SIS identity provisioning requires review', { operationId });
+      throw new AccountError(503, 'provisioning_unknown', 'Auth identity creation could not be confirmed. No email was sent. Review the account before retrying.');
     }
-    // Never compensate by deleting an identity whose ownership is uncertain.
+    // generateLink assigns this unique marker only when creating an identity.
+    // Comparing application and Auth timestamps would reject valid accounts when
+    // the two servers' clocks differ. Never delete an identity with uncertain ownership.
     const ownsInvite = user.user_metadata?.sis_provisioning_operation_id === operationId &&
-      Date.parse(user.created_at) >= startedAt - 1000 && Boolean(user.invited_at);
+      user.email?.toLowerCase() === input.email!.toLowerCase() && !user.email_confirmed_at && Boolean(user.invited_at);
     if (!ownsInvite) {
       console.error('SIS invitation ownership requires review', { operationId, authUserId: user.id });
       throw new AccountError(503, 'identity_inconsistent', 'Invitation ownership could not be confirmed. Account provisioning requires review.');
     }
+    let student;
     try {
-      return { student: await this.write(actorId, user.id, operationId, 'student.account.created', input) };
+      student = await this.write(actorId, user.id, operationId, 'student.account.created', input, { authId: user.id });
     } catch (error) {
       if (error instanceof AdminError && error.outcomeUnknown) {
         console.error('SIS provisioning outcome requires review', { operationId, authUserId: user.id });
@@ -203,6 +215,44 @@ export class AdminService {
       }
       throw error;
     }
+    // Sending is deliberately outside compensation: a committed student survives
+    // every delivery failure, including lost provider responses and process restarts.
+    return { student, invitation: await this.deliverInvitation(actorId, user.id, operationId) };
+  }
+
+  private async deliverInvitation(actorId: string, studentId: string, operationId: string): Promise<InvitationDelivery> {
+    const claimId = randomUUID(); let lease = false;
+    try {
+      await this.rpc('admin_begin_student_change', { p_actor_id: actorId, p_student_id: studentId, p_operation_id: claimId });
+      lease = true;
+      const job = await this.rpc('admin_claim_student_invitation', {
+        p_actor_id: actorId, p_student_id: studentId, p_operation_id: operationId, p_claim_id: claimId,
+      });
+      if (!job) return { status: 'failed', canRetry: true };
+      let status: 'accepted' | 'failed' | 'unknown';
+      try {
+        const { data, error } = await this.client.auth.admin.inviteUserByEmail(job.email, {
+          redirectTo: new URL('/set-password', config.clientUrl).toString(),
+        });
+        status = error ? (error.status && error.status >= 400 && error.status < 500 ? 'failed' : 'unknown')
+          : data.user?.id === job.authId ? 'accepted' : 'unknown';
+      } catch { status = 'unknown'; }
+      const params = { p_actor_id: actorId, p_student_id: studentId, p_claim_id: claimId, p_status: status };
+      // Finishing a claim is idempotent. Retrying this database write never sends mail again.
+      try { return await this.rpc('admin_finish_student_invitation', params); }
+      catch { return await this.rpc('admin_finish_student_invitation', params); }
+    } catch {
+      console.error('SIS invitation dispatch requires review', { studentId, operationId });
+      try {
+        return await this.rpc('admin_invitation_status', { p_actor_id: actorId, p_student_id: studentId })
+          ?? { status: 'unknown', canRetry: false };
+      } catch { return { status: 'unknown', canRetry: false }; }
+    } finally {
+      if (lease) {
+        try { await this.rpc('admin_end_student_change', { p_student_id: studentId, p_operation_id: claimId }); }
+        catch { console.error('SIS invitation lease release requires review', { studentId }); }
+      }
+    }
   }
   private async change(actorId: string, studentId: string, action: AuditAction, input: StudentInput = {}) {
     const operationId = randomUUID();
@@ -216,7 +266,7 @@ export class AdminService {
     let emailRejected = false;
     try {
       if (action === 'student.profile.updated' && input.email && input.email !== before.email) {
-        await this.checkDuplicates(input.email, undefined, studentId);
+        await this.checkDuplicates(input.email, studentId);
         const auth = await this.authIdentity(actorId, before.email);
         if (!auth) throw new AdminError(503, 'The student has no matching authentication identity.');
         if (await this.authIdentity(actorId, input.email)) throw new AdminError(409, 'An authentication account already uses this email.');
@@ -227,23 +277,17 @@ export class AdminService {
           throw new AdminError(error?.status === 422 ? 409 : 503, 'Unable to update the authentication email.');
         }
       }
-      if (action === 'student.password_recovery.requested' || action === 'student.invitation.resent') {
-        const resending = action === 'student.invitation.resent';
+      if (action === 'student.password_recovery.requested') {
         if (!before.isActive) throw new AccountError(409, 'inactive_student', 'Reactivate the student before requesting account emails.');
         const auth = await this.authIdentity(actorId, before.email);
         if (!auth) throw new AccountError(503, 'identity_inconsistent', 'The student has no matching authentication identity.');
-        if (resending && (!auth.invitedAt || auth.emailConfirmedAt)) {
-          throw new AccountError(409, 'invitation_not_pending', 'Only pending invitations can be resent. Use password recovery for confirmed accounts.');
-        }
-        if (!resending && !auth.emailConfirmedAt) {
+        if (!auth.emailConfirmedAt) {
           throw new AccountError(409, 'invitation_pending', 'Resend the invitation for this unconfirmed account.');
         }
         await reserveAccountRequest('admin_mail', before.email, actorId, this.client);
         emailAttempted = true;
         const redirectTo = new URL('/set-password', config.clientUrl).toString();
-        const response: { data?: { user?: { id: string } | null } | null; error: { status?: number } | null } = resending
-          ? await this.client.auth.admin.inviteUserByEmail(before.email, { redirectTo })
-          : await this.client.auth.resetPasswordForEmail(before.email, { redirectTo });
+        const response = await this.client.auth.resetPasswordForEmail(before.email, { redirectTo });
         if (response.error) {
           emailRejected = Boolean(response.error.status && response.error.status >= 400 && response.error.status < 500);
           if (response.error.status === 429) throw new AccountError(429, 'rate_limited', 'The email service is busy. Try again later.', 60);
@@ -252,13 +296,6 @@ export class AdminService {
               : 'Email delivery could not be confirmed. Review the account before retrying.');
         }
         emailSent = true;
-        if (resending) {
-          const returned = response.data?.user;
-          if (returned?.id !== auth.id) {
-            release = false;
-            throw new AccountError(503, 'identity_inconsistent', 'Invitation identity did not match. Administrator review is required.');
-          }
-        }
       }
       const student = await this.write(actorId, studentId, operationId, action, input);
       return { student };
@@ -285,7 +322,6 @@ export class AdminService {
           throw new AdminError(503, 'Email synchronization failed and requires administrator review.');
         }
       }
-      if (emailSent && error instanceof AccountError && error.code === 'identity_inconsistent') throw error;
       if (emailSent) throw new AccountError(503, 'email_audit_incomplete', 'Account email was requested, but audit recording failed. Review the account before retrying.');
       if (error instanceof AccountError) throw error;
       if (error instanceof AdminError) throw error;
@@ -308,7 +344,29 @@ export class AdminService {
     return { message: 'Password recovery instructions requested.' };
   }
   async resendInvitation(actorId: string, studentId: string) {
-    await this.change(actorId, studentId, 'student.invitation.resent');
-    return { message: 'Invitation instructions requested.' };
+    const operationId = randomUUID();
+    const before = await this.rpc('admin_begin_student_change', {
+      p_actor_id: actorId, p_student_id: studentId, p_operation_id: operationId,
+    });
+    let release = true;
+    try {
+      if (!before.isActive) throw new AccountError(409, 'inactive_student', 'Reactivate the student before requesting account emails.');
+      const previous = await this.rpc('admin_invitation_status', { p_actor_id: actorId, p_student_id: studentId });
+      if (previous && !previous.canRetry) throw new AccountError(409, 'email_delivery_unknown', 'Invitation delivery requires operator review before another email.');
+      const auth = await this.authIdentity(actorId, before.email);
+      if (!auth) throw new AccountError(503, 'identity_inconsistent', 'The student has no matching authentication identity.');
+      if (!auth.invitedAt || auth.emailConfirmedAt) throw new AccountError(409, 'invitation_not_pending', 'Only pending invitations can be resent. Use password recovery for confirmed accounts.');
+      await reserveAccountRequest('admin_mail', before.email, actorId, this.client);
+      await this.write(actorId, studentId, operationId, 'student.invitation.resent', {}, { authId: auth.id });
+    } catch (error) {
+      if (error instanceof AdminError && error.outcomeUnknown) release = false;
+      throw error;
+    } finally {
+      if (release) {
+        try { await this.rpc('admin_end_student_change', { p_student_id: studentId, p_operation_id: operationId }); }
+        catch { console.error('SIS invitation queue lease release requires review', { studentId }); }
+      }
+    }
+    return { invitation: await this.deliverInvitation(actorId, studentId, operationId) };
   }
 }

@@ -1,7 +1,20 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { apiGet, apiPatch, apiPost, onSessionExpired, resetSessionRequests } from './api';
+import { apiGet, apiPatch, apiPost, apiUpload, onSessionExpired, resetSessionRequests } from './api';
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+
+test('photo uploads send the original image with cookies and never replay a failed write', async () => {
+  const photo = new File(['photo'], 'student.png', { type: 'image/png' });
+  const fetcher = vi.fn(async () => json({ avatarUrl: 'https://storage.test/student.png' }));
+  vi.stubGlobal('fetch', fetcher);
+  await expect(apiUpload('/api/v1/admin/student-photos', photo)).resolves.toHaveProperty('avatarUrl');
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/v1/admin/student-photos', {
+    method: 'POST', headers: { 'Content-Type': 'image/png' }, body: photo, credentials: 'include',
+  });
+  fetcher.mockClear().mockResolvedValue(json({ error: 'Expired' }, 401));
+  await expect(apiUpload('/api/v1/admin/student-photos', photo)).rejects.toMatchObject({ status: 401 });
+  expect(fetcher).toHaveBeenCalledOnce();
+});
 beforeEach(() => resetSessionRequests());
 afterEach(() => { resetSessionRequests(); vi.unstubAllGlobals(); });
 

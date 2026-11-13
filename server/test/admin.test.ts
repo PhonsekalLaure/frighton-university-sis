@@ -15,7 +15,7 @@ const studentId = '22222222-2222-4222-8222-222222222222';
 const authId = '33333333-3333-4333-8333-333333333333';
 const profile = { id: studentId, email: 'student@example.edu', firstName: 'Ada', lastName: 'Student',
   studentNumber: 'STU-2026-1234', isActive: true, department: 'Science', program: 'BS Science', yearLevel: 1, academicStatus: 'active' };
-const input = { firstName: 'Ada', lastName: 'Student', email: profile.email, studentNumber: profile.studentNumber,
+const input = { firstName: 'Ada', lastName: 'Student', email: profile.email,
   department: 'Science', program: 'BS Science', yearLevel: 1, academicStatus: 'active' as const };
 const sqlFailure = { code: 'P0001', message: 'Internal database failure details' };
 
@@ -24,12 +24,16 @@ function fixture(options: { rpcError?: any; updateError?: boolean; rollbackError
   unknownCommit?: boolean; inviteError?: boolean; missingStudent?: boolean; replyCode?: string;
   retrySuccess?: boolean; committedReadError?: boolean; auditAvatarUrl?: string; unconfirmed?: boolean;
   inactive?: boolean; noInvite?: boolean; wrongInviteIdentity?: boolean; mailUnknown?: boolean;
-  rateDenied?: boolean; rateUnavailable?: boolean } = {}) {
+  rateDenied?: boolean; rateUnavailable?: boolean; migrationMissing?: boolean; deliveryUnknown?: boolean;
+  finishLost?: boolean; finishUnavailable?: boolean; claimFails?: boolean;
+  generatedUser?: Record<string, unknown> } = {}) {
   const calls: Array<{ name: string; params?: any }> = [];
   let currentAuthEmail = profile.email;
   let currentStudent: Record<string, any> = { ...profile, isActive: !options.inactive };
   let writeCalls = 0;
   let committed: any = null;
+  let invitation: any = options.deliveryUnknown ? { status: 'unknown', canRetry: false } : null;
+  let finishCalls = 0;
   const query = (table: string) => {
     let single = false;
     const q: any = {};
@@ -71,18 +75,35 @@ function fixture(options: { rpcError?: any; updateError?: boolean; rollbackError
       if (name === 'admin_student_auth') return { data: options.missingAuth ? null : params.p_email === currentAuthEmail
         ? { id: authId, invitedAt: options.noInvite ? null : '2026-01-01',
           emailConfirmedAt: options.unconfirmed ? null : '2026-01-02', lastSignInAt: '2026-10-01' } : null, error: null };
-      if (name === 'admin_write_student') {
+      if (name === 'admin_invitation_ready') return { data: true, error: options.migrationMissing ? { code: 'PGRST202' } : null };
+      if (name === 'admin_invitation_status') return { data: invitation, error: null };
+      if (name === 'admin_claim_student_invitation') {
+        if (options.claimFails) return { data: null, error: { code: '08006' } };
+        invitation = { status: 'sending', canRetry: false };
+        return { data: { email: profile.email, authId }, error: null };
+      }
+      if (name === 'admin_finish_student_invitation') {
+        finishCalls++;
+        invitation = { status: params.p_status, canRetry: params.p_status !== 'unknown' };
+        if (options.finishUnavailable || (options.finishLost && finishCalls === 1)) return { data: null, error: { code: '08006' } };
+        return { data: invitation, error: null };
+      }
+      if (name === 'admin_write_student' || name === 'admin_queue_student_invitation') {
         writeCalls++;
         if (options.unknownCommit) return { data: null, error: writeCalls === 1 ? { message: 'Lost response' } : sqlFailure };
         const target = { ...currentStudent, ...params.p_values, id: params.p_student_id };
         if (options.lostReply) {
+          if (name === 'admin_queue_student_invitation') invitation = { status: 'queued', canRetry: true };
           currentStudent = target;
           committed = { actor_id: actor, student_id: params.p_student_id, action: params.p_action,
             target: { ...target, avatarUrl: options.auditAvatarUrl ?? target.avatarUrl } };
           if (options.retrySuccess && writeCalls > 1) return { data: committed.target, error: null };
           return { data: null, error: { code: options.replyCode, message: 'Lost transport response' } };
         }
-        if (!options.rpcError) currentStudent = target;
+        if (!options.rpcError) {
+          currentStudent = target;
+          if (name === 'admin_queue_student_invitation') invitation = { status: 'queued', canRetry: true };
+        }
         return { data: target, error: options.rpcError ?? null };
       }
       if (name === 'admin_dashboard') return { data: { metrics: {}, currentTerm: null, recentActivity: [] }, error: null };
@@ -91,10 +112,16 @@ function fixture(options: { rpcError?: any; updateError?: boolean; rollbackError
     auth: {
       admin: {
         inviteUserByEmail: async (email: string, params: any) => {
+          calls.push({ name: 'smtp', params: { email, ...params } });
+          if (options.mailUnknown) throw new Error('Sensitive provider details must not escape');
+          return { data: { user: { id: options.wrongInviteIdentity ? actor : authId } }, error: options.mailError ? { status: 400 } : null };
+        },
+        generateLink: async ({ email, options: params = {} }: any) => {
           calls.push({ name: 'invite', params: { email, ...params } });
           if (options.inviteError) return { data: {}, error: { status: 500 } };
-          return { data: { user: { id: options.wrongInviteIdentity ? actor : authId, email, user_metadata: params.data,
-            invited_at: new Date().toISOString(), created_at: new Date().toISOString() } }, error: null };
+          return { data: { properties: { hashed_token: 'synthetic_invitation_token_1234567890', verification_type: 'invite' }, user: { id: options.wrongInviteIdentity ? actor : authId, email, user_metadata: params.data,
+            invited_at: new Date().toISOString(), created_at: new Date().toISOString(), email_confirmed_at: null,
+            ...options.generatedUser } }, error: null };
         },
         updateUserById: async (id: string, params: any) => {
           calls.push({ name: 'auth.update', params: { id, ...params } });
@@ -123,7 +150,7 @@ describe('Admin validation', () => {
       { ...input, role: 'admin' }, { ...input, password: 'secret' }, { ...input, avatarUrl: 'javascript:alert(1)' }]) {
       assert.throws(() => studentInput(body, true), AdminError);
     }
-    assert.throws(() => studentInput({ studentNumber: input.studentNumber }), /immutable/);
+    assert.throws(() => studentInput({ studentNumber: profile.studentNumber }), /immutable/);
     assert.throws(() => studentInput({}), /at least one/);
     assert.throws(() => studentInput({ firstName: null }), /valid/);
     assert.equal(studentInput({ middleName: '  ' }).middleName, null);
@@ -144,6 +171,52 @@ describe('Admin validation', () => {
 });
 
 describe('Admin account lifecycle', () => {
+  test('migration readiness is checked before generating identities or student records', async () => {
+    const f = fixture({ missingAuth: true, migrationMissing: true });
+    await assert.rejects(() => f.service.create(actor, input), (e: any) => e.status === 503);
+    assert.equal(f.calls.some(call => call.name === 'invite' || call.name === 'smtp'), false);
+    assert.equal(f.writeCalls, 0);
+  });
+  test('SMTP rejection and uncertain delivery preserve the committed student and expose separate delivery state', async () => {
+    for (const option of [{ mailError: true }, { mailUnknown: true }]) {
+      const f = fixture({ missingAuth: true, ...option });
+      const result = await f.service.create(actor, input);
+      assert.equal(result.student.email, input.email);
+      assert.equal(result.invitation.status, option.mailError ? 'failed' : 'unknown');
+      assert.equal(result.invitation.canRetry, Boolean(option.mailError));
+      assert.equal(f.calls.filter(call => call.name === 'smtp').length, 1);
+      assert.equal(f.calls.some(call => call.name === 'auth.delete'), false);
+    }
+  });
+  test('no email is sent before a confirmed student commit, including unresolved commit responses', async () => {
+    for (const options of [{ rpcError: { code: '23505' } }, { unknownCommit: true }]) {
+      const f = fixture({ missingAuth: true, ...options });
+      await assert.rejects(() => f.service.create(actor, input));
+      assert.equal(f.calls.some(call => call.name === 'smtp'), false);
+    }
+  });
+  test('lost delivery status acknowledgements retry only the idempotent database update', async () => {
+    for (const options of [{ finishLost: true }, { finishUnavailable: true }, { lostReply: true }]) {
+      const f = fixture({ missingAuth: true, ...options });
+      const result = await f.service.create(actor, input);
+      assert.equal(result.student.email, input.email);
+      assert.equal(f.calls.filter(call => call.name === 'smtp').length, 1);
+      assert.equal(f.calls.some(call => call.name === 'auth.delete'), false);
+    }
+  });
+  test('unknown delivery survives refresh and prevents a resend before generating a fresh link', async () => {
+    const f = fixture({ unconfirmed: true, deliveryUnknown: true });
+    await assert.rejects(() => f.service.resendInvitation(actor, studentId), (e: any) => e.code === 'email_delivery_unknown');
+    assert.equal(f.calls.some(call => call.name === 'invite' || call.name === 'smtp'), false);
+    const result = await f.service.detail(actor, studentId);
+    assert.equal(result.student.invitation.status, 'unknown');
+  });
+  test('a lost claim response leaves a committed account without attempting SMTP', async () => {
+    const f = fixture({ missingAuth: true, claimFails: true });
+    const result = await f.service.create(actor, input);
+    assert.equal(result.student.email, input.email);
+    assert.equal(f.calls.some(call => call.name === 'smtp' || call.name === 'auth.delete'), false);
+  });
   test('invites without a password and provisions once using a transaction RPC', async () => {
     const f = fixture({ missingAuth: true });
     const result = await f.service.create(actor, input);
@@ -151,15 +224,45 @@ describe('Admin account lifecycle', () => {
     const invite = f.calls.find(x => x.name === 'invite')!;
     assert.equal(invite.params.redirectTo, new URL('/set-password', config.clientUrl).toString());
     assert.equal('password' in invite.params, false);
-    const write = f.calls.find(x => x.name === 'admin_write_student')!;
+    const write = f.calls.find(x => x.name === 'admin_queue_student_invitation')!;
     assert.equal(write.params.p_student_id, authId);
     assert.equal(write.params.p_action, 'student.account.created');
+    assert.equal('studentNumber' in write.params.p_values, false);
+    assert.ok(f.calls.findIndex(x => x.name === 'invite') < f.calls.findIndex(x => x.name === 'admin_queue_student_invitation'));
+    assert.equal(JSON.stringify(write.params).includes('synthetic_invitation_token'), false);
+    const delivery = f.calls.find(x => x.name === 'smtp')!;
+    assert.equal(delivery.params.email, input.email);
+    assert.equal(delivery.params.redirectTo, new URL('/set-password', config.clientUrl).toString());
+    assert.equal(delivery.params.data, undefined);
+    assert.equal(result.invitation.status, 'accepted');
+    assert.ok(f.calls.findIndex(x => x.name === 'admin_queue_student_invitation') < f.calls.findIndex(x => x.name === 'smtp'));
     assert.equal(f.writeCalls, 1);
   });
   test('duplicate directory and existing Auth accounts do not send invitations', async () => {
     for (const f of [fixture({ duplicate: true }), fixture()]) {
       await assert.rejects(() => f.service.create(actor, input), (e: any) => e.status === 409);
       assert.equal(f.calls.some(x => x.name === 'invite'), false);
+    }
+  });
+  test('creation ownership does not depend on synchronized application and Auth clocks', async () => {
+    for (const offset of [-40_000, 40_000, -300_000]) {
+      const f = fixture({ missingAuth: true, generatedUser: { created_at: new Date(Date.now() + offset).toISOString() } });
+      const result = await f.service.create(actor, input);
+      assert.equal(result.student.email, input.email);
+      assert.equal(result.invitation.status, 'accepted');
+      assert.equal(f.writeCalls, 1);
+      assert.equal(f.calls.some(call => call.name === 'auth.delete'), false);
+    }
+  });
+  test('ownership requires the current operation, matching email and an unconfirmed invitation', async () => {
+    for (const generatedUser of [
+      { user_metadata: {} }, { user_metadata: { sis_provisioning_operation_id: actor } },
+      { email: 'someone-else@example.edu' }, { email_confirmed_at: new Date().toISOString() }, { invited_at: null },
+    ]) {
+      const f = fixture({ missingAuth: true, generatedUser });
+      await assert.rejects(() => f.service.create(actor, input), (e: any) => e.code === 'identity_inconsistent');
+      assert.equal(f.writeCalls, 0);
+      assert.equal(f.calls.some(call => call.name === 'smtp' || call.name === 'auth.delete'), false);
     }
   });
   test('invitation errors do not provision or delete Auth identities', async () => {
@@ -295,12 +398,12 @@ describe('Admin account lifecycle', () => {
   test('resends a pending invitation without provisioning, metadata replacement, or deleting identities', async () => {
     const f = fixture({ unconfirmed: true });
     await f.service.resendInvitation(actor, studentId);
-    assert.equal(f.calls.filter(x => x.name === 'invite').length, 1);
+    assert.equal(f.calls.filter(x => x.name === 'smtp').length, 1);
     assert.equal(f.calls.some(x => x.name === 'auth.delete' || x.name === 'auth.update'), false);
-    assert.equal(f.calls.find(x => x.name === 'invite')!.params.data, undefined);
-    assert.equal(f.calls.find(x => x.name === 'admin_write_student')!.params.p_action, 'student.invitation.resent');
+    assert.equal(f.calls.find(x => x.name === 'smtp')!.params.data, undefined);
+    assert.equal(f.calls.find(x => x.name === 'admin_queue_student_invitation')!.params.p_action, 'student.invitation.resent');
     assert.equal(f.writeCalls, 1);
-    assert.ok(f.calls.findIndex(x => x.name === 'sis_reserve_account_request') < f.calls.findIndex(x => x.name === 'invite'));
+    assert.ok(f.calls.findIndex(x => x.name === 'sis_reserve_account_request') < f.calls.findIndex(x => x.name === 'smtp'));
   });
   test('ineligible resends and unconfirmed recoveries never send mail', async () => {
     for (const options of [{}, { unconfirmed: true, noInvite: true }, { unconfirmed: true, inactive: true }]) {
@@ -315,9 +418,11 @@ describe('Admin account lifecycle', () => {
   });
   test('resend identity mismatch requires review and never records success or cleans up an identity', async () => {
     const f = fixture({ unconfirmed: true, wrongInviteIdentity: true });
-    await assert.rejects(() => f.service.resendInvitation(actor, studentId), (e: any) => e.status === 503);
-    assert.equal(f.writeCalls, 0);
-    assert.equal(f.calls.some(x => x.name === 'auth.delete' || x.name === 'admin_end_student_change'), false);
+    const result = await f.service.resendInvitation(actor, studentId);
+    assert.equal(result.invitation.status, 'unknown');
+    assert.equal(result.invitation.canRetry, false);
+    assert.equal(f.writeCalls, 1); // Audit records the queued request, not delivery success.
+    assert.equal(f.calls.some(x => x.name === 'auth.delete'), false);
   });
   test('rate denial and rate service failure block all email providers', async () => {
     for (const options of [{ rateDenied: true }, { rateUnavailable: true }]) {
@@ -341,7 +446,7 @@ describe('Admin account lifecycle', () => {
   test('lost resend audit response reconciles without a second email', async () => {
     const f = fixture({ unconfirmed: true, lostReply: true });
     await f.service.resendInvitation(actor, studentId);
-    assert.equal(f.calls.filter(x => x.name === 'invite').length, 1);
+    assert.equal(f.calls.filter(x => x.name === 'smtp').length, 1);
     assert.equal(f.writeCalls, 2);
   });
   test('student detail reuses domain services for empty and populated SIS records', async () => {

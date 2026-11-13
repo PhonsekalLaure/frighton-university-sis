@@ -217,12 +217,12 @@ Use a modal or dedicated form within the accounts/detail experience. There is no
 | `middleName` | Optional | Editable, maximum 100; null/blank clears. |
 | `lastName` | Required | Editable, nonempty, maximum 100. |
 | `email` | Required | Editable, valid email, maximum 254; server trims/lowercases. |
-| `studentNumber` | Required | Immutable after creation; `^STU-\d{4}-\d{4,}$`, maximum 50. Example `STU-2026-0042`. |
-| `department` | Required, nonblank | Editable, maximum 100; may be cleared to null on edit. |
+| `studentNumber` | Generated; omit from request | Read-only. Assigned at creation as `STU-YYYY-NNNN`, continuing after the highest committed sequence for the current Manila year. Immutable after creation. |
+| `department` | Required dropdown selection | Biological Sciences, Computer Science, Humanities, or Mathematics. Preserve an existing department outside these options on edit; maximum 100, may be cleared to null. |
 | `program` | Required, nonblank | Editable, maximum 150; may be cleared to null on edit. |
 | `yearLevel` | Required | Number/integer 1-4; may be null on edit. Do not send a numeric string. |
 | `academicStatus` | Required | Editable; exact enum value, never null. |
-| `avatarUrl` | Optional | Editable HTTP/HTTPS URL, maximum 2048; no URL credentials; null/blank clears. No avatar-upload endpoint exists. |
+| `avatarUrl` | Optional | Populated by the photo picker after upload; HTTP/HTTPS URL, maximum 2048, no URL credentials. Send null to remove the profile photo. |
 
 Trim textual inputs, reject control characters, omit absent optional create fields, and send only changed allowed fields on PATCH. Do not submit an empty PATCH; disable Save when unchanged. Do not submit `id`, `fullName`, `isActive`, `role`, `auth`, timestamps, or hold counts. For cleared nullable fields, send `null`, not an omitted key.
 
@@ -233,15 +233,22 @@ Minimal creation example:
   "firstName": "Jane",
   "lastName": "Doe",
   "email": "jane.doe@example.edu",
-  "studentNumber": "STU-2026-0042",
-  "department": "Computer Studies",
+  "department": "Computer Science",
   "program": "BS Computer Science",
   "yearLevel": 1,
   "academicStatus": "active"
 }
 ```
 
-Creation sends an invitation and provisions the linked account records. A `201` means the request succeeded, not that email reached the inbox or the student accepted it. Navigate to the returned `student.id`, refresh list/dashboard data, and use wording such as "Account created; invitation requested." A duplicate email/student number returns `409`; do not assume which field conflicted unless the server says so.
+Creation generates an Auth invitation link without email, commits the linked account records and pending delivery request together, and only then calls Supabase's invitation API using its existing SMTP configuration. A `201 { student, invitation }` confirms that the student was saved; it does not prove inbox delivery. `invitation` contains `status` (`queued`, `sending`, `accepted`, `failed`, or `unknown`), `canRetry`, and optionally `updatedAt`. Navigate to the returned `student.id` for every `201`, including failed/unconfirmed email delivery. Show the persisted `student.invitation` from the detail response and offer Send invitation only for retryable states. `accepted` means provider acceptance. `sending`/`unknown` disable invitation requests across refreshes. A duplicate email/student number returns `409`; do not assume which field conflicted unless the server says so.
+
+The student number is allocated in the database transaction, using a locked counter per year initialized from existing profiles. Deletion does not lower the counter; explicit seed/import numbers advance it. A rolled-back creation does not consume a number. Do not predict the next number in the client. The database RPC retains explicit-number compatibility for older servers during rollout; the new HTTP API rejects submitted student numbers.
+
+Use a file picker with preview and removal controls for the optional student photo. Upload only when the user saves: `POST /api/v1/admin/student-photos` with the file bytes as the body and its `image/jpeg`, `image/png`, or `image/webp` Content-Type. The authenticated admin route enforces a 2 MB limit and checks file signatures. It returns `201 { avatarUrl }`; include that URL in the subsequent account POST/PATCH. Upload failure retains form input and permits another save because no account request was attempted. Account errors retain the existing uncertain-outcome protections.
+
+Creating a student without a photo sends no upload request. The form, admin student profile, and student dashboard show a default person icon when no photo exists or its image fails to load. Removing a photo restores the icon.
+
+Files are stored in the public `sis-student-photos` Supabase bucket with server-only uploads. URLs permit public image retrieval; do not put identity documents in this field. Content-based paths reuse the same administrator's repeated upload. Replacing/removing a photo clears its profile reference and retains the storage object, so shared/reused URLs are not deleted. Failed account saves can also leave an unreferenced object; include those in storage housekeeping after checking profile references.
 
 Before an email edit, explain that it changes the shared university login identity, not just a contact field. The backend handles Auth/directory/profile synchronization; the client must not perform separate Supabase writes. On `503` or a network timeout, retain the form safely and refresh/review the record before any manual retry. An unresolved synchronization issue requires operator review, not a client-side rollback.
 

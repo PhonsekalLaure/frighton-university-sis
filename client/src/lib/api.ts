@@ -93,3 +93,12 @@ async function write<T>(path: string, method: string, body: unknown): Promise<T>
 export const apiPost = <T>(path: string, body: unknown) => write<T>(path, 'POST', body);
 export const apiPatch = <T>(path: string, body: unknown) => write<T>(path, 'PATCH', body);
 export const apiDelete = (path: string) => write<void>(path, 'DELETE', undefined);
+
+export async function apiUpload<T>(path: string, file: File): Promise<T> {
+  try {
+    return await send<T>(path, { method: 'POST', headers: { 'Content-Type': file.type }, body: file });
+  } catch (error) {
+    if ((error as ApiFailure).status === 401) expireSession();
+    throw error;
+  }
+}

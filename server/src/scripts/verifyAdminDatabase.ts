@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { assertLinkedAdminProject } from './adminProjectGuard.js';
+import { assertLinkedAdminProject, SIS_PROJECT_REF } from './adminProjectGuard.js';
 
 // Generates only a temporary SQL artifact. Every synthetic record is rolled back.
 assertLinkedAdminProject();
@@ -20,14 +20,15 @@ const migrations = args.slice(1).map(name => {
   }
   return source.replace(/^BEGIN;[ \t]*\r?$/m, '').replace(/COMMIT;\s*$/, '');
 }).join('\n');
-const assertions = readFileSync(join(root, 'server/test/admin-database.sql'), 'utf8');
+const assertions = readFileSync(join(root, 'server/test/admin-database.sql'), 'utf8') + '\n' +
+  readFileSync(join(root, 'server/test/invitation-database.sql'), 'utf8');
 const directory = mkdtempSync(join(tmpdir(), 'sis-admin-verification-'));
 const file = join(directory, 'verify.sql');
 try {
   writeFileSync(file, `BEGIN;\n${migrations}\nSET LOCAL plpgsql.check_asserts = on;\n${assertions}\nROLLBACK;`, 'utf8');
-  const cliArgs = ['--yes', 'supabase', 'db', 'query', '--linked', '--file', file, '--output', 'json'];
+  const cliArgs = ['--yes', 'supabase', 'db', 'query', `--remote=${SIS_PROJECT_REF}`, '--file', file, '--output', 'json'];
   const result = process.platform === 'win32'
-    ? spawnSync('cmd.exe', ['/d', '/s', '/c', `npx.cmd --yes supabase db query --linked --file "${file}" --output json`],
+    ? spawnSync('cmd.exe', ['/d', '/s', '/c', `npx.cmd --yes supabase db query --remote=${SIS_PROJECT_REF} --file "${file}" --output json`],
       { cwd: root, stdio: 'inherit', windowsVerbatimArguments: true })
     : spawnSync('npx', cliArgs, { cwd: root, stdio: 'inherit' });
   if (result.error) throw result.error;

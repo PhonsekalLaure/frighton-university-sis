@@ -1,7 +1,7 @@
 import type { ApiFailure } from './api';
 
 export function uncertainOutcome(error: ApiFailure) {
-  return !error.status || (error.status >= 500 && !['rate_limit_unavailable', 'email_rejected', 'identity_inconsistent'].includes(error.code ?? ''));
+  return !error.status || (error.status >= 500 && !['rate_limit_unavailable', 'email_rejected', 'identity_inconsistent', 'provisioning_rejected'].includes(error.code ?? ''));
 }
 
 export function accountFeedback(error: ApiFailure) {

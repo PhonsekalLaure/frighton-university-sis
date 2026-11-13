@@ -3,6 +3,7 @@ import { useApiRead } from '../lib/useApiRead';
 import { money } from '../lib/format';
 import { ErrorState, LoadingState, SectionHeading } from '../components/PageStates';
 import type { DashboardData } from '../types/dashboard';
+import { StudentAvatar } from '../components/StudentAvatar';
 
 type Navigate = (view: 'schedule' | 'grades' | 'billing') => void;
 export function DashboardPage({ onNavigate }: { onNavigate: Navigate }) {
@@ -21,7 +22,7 @@ export function DashboardRecords({ data, onNavigate }: { data: DashboardData; on
     </section>
     {onNavigate ? <div className="quick-links"><button onClick={() => onNavigate('grades')}><Award size={19} /><span><small>ACADEMIC RECORDS</small><strong>View grades</strong></span><ArrowRight size={16} /></button><button onClick={() => onNavigate('billing')}><CreditCard size={19} /><span><small>ACCOUNT SUMMARY</small><strong>{billingLabel}</strong></span><ArrowRight size={16} /></button></div> : <section className="content-card"><p className="eyebrow">ACCOUNT SUMMARY</p><h2>{billingLabel}</h2></section>}
   </div><aside className="dashboard-side">
-    <section className="profile-card"><p className="eyebrow">STUDENT PROFILE</p><div className="profile-avatar">{data.profile.fullName.charAt(0)}</div><h2>{data.profile.fullName}</h2><p>{data.profile.email}</p><dl><div><dt>Student number</dt><dd>{data.profile.studentNumber}</dd></div><div><dt>Year level</dt><dd>{data.profile.yearLevel || '—'}</dd></div><div><dt>Department</dt><dd>{data.profile.department || '—'}</dd></div></dl></section>
+    <section className="profile-card"><p className="eyebrow">STUDENT PROFILE</p><StudentAvatar src={data.profile.avatarUrl} name={data.profile.fullName} /><h2>{data.profile.fullName}</h2><p>{data.profile.email}</p><dl><div><dt>Student number</dt><dd>{data.profile.studentNumber}</dd></div><div><dt>Year level</dt><dd>{data.profile.yearLevel || '—'}</dd></div><div><dt>Department</dt><dd>{data.profile.department || '—'}</dd></div></dl></section>
     <section className="metric-card"><p className="eyebrow">ACADEMIC SNAPSHOT</p><div className="metric"><span>Cumulative GPA</span><strong>{data.metrics.cumulativeGpa ?? '—'}</strong></div><div className="metric"><span>Credits earned</span><strong>{data.metrics.creditsEarned}</strong></div><div className="metric"><span>Active holds</span><strong className={data.metrics.activeHolds ? 'warning-text' : ''}>{data.metrics.activeHolds}</strong></div></section>
   </aside></div>;
 }

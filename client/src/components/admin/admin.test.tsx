@@ -3,14 +3,14 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { AdminConsolePage } from '../../pages/AdminConsolePage';
 import { StudentForm } from './StudentForm';
-import { apiGet, apiPatch, apiPost } from '../../lib/api';
+import { apiGet, apiPatch, apiPost, apiUpload } from '../../lib/api';
 import { studentPayload, studentValues } from '../../lib/studentForm';
 import { adminDashboard, adminUser, detail, event, page, student } from '../../test/fixtures';
 
-vi.mock('../../lib/api', () => ({ apiGet: vi.fn(), apiPatch: vi.fn(), apiPost: vi.fn() }));
+vi.mock('../../lib/api', () => ({ apiGet: vi.fn(), apiPatch: vi.fn(), apiPost: vi.fn(), apiUpload: vi.fn() }));
 const get = vi.mocked(apiGet), patch = vi.mocked(apiPatch), post = vi.mocked(apiPost);
 beforeEach(() => { vi.resetAllMocks(); vi.spyOn(window, 'confirm').mockReturnValue(true); window.history.replaceState({}, '', '/admin'); });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 function Harness({ initial }: { initial: string }) {
   const [route, setRoute] = useState(initial);
@@ -139,12 +139,12 @@ test('uncertain edit outcomes block another save until an explicit record review
   expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
 });
 
-test('profile validation matches field limits, year bounds and student-number syntax', () => {
+test('profile validation matches field limits and year bounds and omits generated student numbers', () => {
   const values = studentValues(student);
   expect(studentPayload(values, student)).toEqual({});
   expect(() => studentPayload({ ...values, firstName: 'x'.repeat(101) })).toThrow(/100/);
   expect(() => studentPayload({ ...values, yearLevel: '1.5' })).toThrow(/integer/);
-  expect(() => studentPayload({ ...values, studentNumber: 'ADM-123' })).toThrow(/STU/);
+  expect(studentPayload({ ...values, studentNumber: '' })).not.toHaveProperty('studentNumber');
   expect(() => studentPayload({ ...values, firstName: 'Demo\n' })).toThrow(/control/);
   expect(() => studentPayload({ ...values, avatarUrl: 'https://user:pass@example.invalid/pic' })).toThrow(/without credentials/);
   expect(studentPayload({ ...values, avatarUrl: 'https://example.invalid/' + 'a'.repeat(1800) })).toHaveProperty('avatarUrl');
@@ -199,31 +199,126 @@ test('creating a student validates locally and provisions through one mocked req
   const saved = vi.fn();
   post.mockResolvedValue({ student });
   render(<StudentForm onClose={vi.fn()} onSaved={saved} />);
+  expect(screen.getByLabelText('Student number')).toBeDisabled();
+  expect(screen.getByLabelText('Student number')).toHaveAttribute('placeholder', 'Assigned automatically when saved');
+  expect(screen.queryByLabelText('Avatar URL')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Student photo')).not.toBeRequired();
+  expect(screen.getByRole('img', { name: 'Default profile picture for student' })).toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Department' })).toHaveValue('');
   fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
   expect(screen.getByRole('alert')).toHaveTextContent('firstName is required');
   expect(post).not.toHaveBeenCalled();
   for (const [label, value] of [
     ['First name', 'Demo'], ['Last name', 'Student'], ['University email', 'STUDENT@example.invalid'],
-    ['Student number', student.studentNumber], ['Department', student.department!], ['Program', student.program!],
+    ['Department', 'Computer Science'], ['Program', student.program!],
   ]) fireEvent.change(screen.getByLabelText(label), { target: { value } });
   fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
   await waitFor(() => expect(saved).toHaveBeenCalledWith(student.id));
   expect(post).toHaveBeenCalledExactlyOnceWith('/api/v1/admin/students', {
-    firstName: 'Demo', lastName: 'Student', email: student.email, studentNumber: student.studentNumber,
-    department: student.department, program: student.program, yearLevel: 1, academicStatus: 'active',
+    firstName: 'Demo', lastName: 'Student', email: student.email,
+    department: 'Computer Science', program: student.program, yearLevel: 1, academicStatus: 'active',
   });
+  expect(apiUpload).not.toHaveBeenCalled();
 });
 
-test('an uncertain creation retains input and reviews existing accounts without sending another invitation', async () => {
-  post.mockRejectedValue(new TypeError('Network response lost'));
+test('department dropdown offers university departments and preserves an existing department on edit', () => {
+  const { unmount } = render(<StudentForm onClose={vi.fn()} onSaved={vi.fn()} />);
+  const department = screen.getByRole('combobox', { name: 'Department' });
+  expect(within(department).getAllByRole('option').map(option => option.textContent)).toEqual([
+    'Select a department', 'Biological Sciences', 'Computer Science', 'Humanities', 'Mathematics',
+  ]);
+  fireEvent.change(department, { target: { value: 'Humanities' } });
+  expect(department).toHaveValue('Humanities');
+  unmount();
+  render(<StudentForm student={student} onClose={vi.fn()} onSaved={vi.fn()} />);
+  expect(screen.getByRole('combobox', { name: 'Department' })).toHaveValue(student.department);
+  expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+});
+
+test('a photo is previewed and uploaded before saving, and can be removed', async () => {
+  const createUrl = vi.fn(() => 'blob:photo-preview'), revokeUrl = vi.fn();
+  vi.stubGlobal('URL', class extends URL { static createObjectURL = createUrl; static revokeObjectURL = revokeUrl; });
+  const uploadedUrl = 'https://storage.example.invalid/photos/student.png';
+  vi.mocked(apiUpload).mockResolvedValue({ avatarUrl: uploadedUrl });
+  patch.mockResolvedValue({ student });
+  const saved = vi.fn();
+  const { unmount } = render(<StudentForm student={student} onClose={vi.fn()} onSaved={saved} />);
+  const photo = new File(['photo'], 'photo.png', { type: 'image/png' });
+  fireEvent.change(screen.getByLabelText('Student photo'), { target: { files: [photo] } });
+  expect(await screen.findByAltText('Student photo preview')).toHaveAttribute('src', 'blob:photo-preview');
+  expect(patch).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(saved).toHaveBeenCalledWith(student.id));
+  expect(apiUpload).toHaveBeenCalledExactlyOnceWith('/api/v1/admin/student-photos', photo);
+  expect(patch).toHaveBeenCalledExactlyOnceWith(`/api/v1/admin/students/${student.id}`, { avatarUrl: uploadedUrl });
+  expect(revokeUrl).toHaveBeenCalledWith('blob:photo-preview');
+  fireEvent.click(screen.getByRole('button', { name: 'Remove photo' }));
+  expect(screen.queryByAltText('Student photo preview')).not.toBeInTheDocument();
+  unmount();
+});
+
+test('invalid photos never upload, and upload failures retain edits without provisioning an account', async () => {
+  vi.stubGlobal('URL', class extends URL { static createObjectURL = vi.fn(() => 'blob:photo'); static revokeObjectURL = vi.fn(); });
+  vi.mocked(apiUpload).mockRejectedValue(new TypeError('Network response lost'));
+  render(<StudentForm onClose={vi.fn()} onSaved={vi.fn()} />);
+  const picker = screen.getByLabelText('Student photo');
+  for (const file of [new File(['x'], 'script.svg', { type: 'image/svg+xml' }), new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'large.png', { type: 'image/png' })]) {
+    fireEvent.change(picker, { target: { files: [file] } });
+    expect(screen.getByRole('alert')).toHaveTextContent('2 MB or smaller');
+  }
+  expect(apiUpload).not.toHaveBeenCalled();
+  for (const [label, value] of [['First name', 'Demo'], ['Last name', 'Student'], ['University email', student.email], ['Department', 'Computer Science'], ['Program', student.program!]]) {
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  }
+  fireEvent.change(picker, { target: { files: [new File(['photo'], 'photo.png', { type: 'image/png' })] } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Photo upload failed');
+  expect(post).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Create account' })).toBeEnabled();
+  expect(screen.getByLabelText('First name')).toHaveValue('Demo');
+});
+
+test('an invalid replacement clears a previously selected photo without uploading stale bytes', async () => {
+  vi.stubGlobal('URL', class extends URL { static createObjectURL = vi.fn(() => 'blob:photo'); static revokeObjectURL = vi.fn(); });
+  patch.mockResolvedValue({ student });
+  render(<StudentForm student={student} onClose={vi.fn()} onSaved={vi.fn()} />);
+  const picker = screen.getByLabelText('Student photo');
+  fireEvent.change(picker, { target: { files: [new File(['valid'], 'photo.png', { type: 'image/png' })] } });
+  expect(screen.getByAltText('Student photo preview')).toBeInTheDocument();
+  fireEvent.change(picker, { target: { files: [new File(['invalid'], 'image.svg', { type: 'image/svg+xml' })] } });
+  expect(screen.queryByAltText('Student photo preview')).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('First name'), { target: { value: 'Changed' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(patch).toHaveBeenCalledExactlyOnceWith(`/api/v1/admin/students/${student.id}`, { firstName: 'Changed' }));
+  expect(apiUpload).not.toHaveBeenCalled();
+});
+
+test('resend outcomes appear once in the persisted invitation panel', async () => {
+  const pending = { ...detail, student: { ...detail.student, auth: { ...detail.student.auth, emailConfirmedAt: null },
+    invitation: { status: 'failed', canRetry: true } } };
+  get.mockResolvedValueOnce(pending).mockResolvedValue({ ...pending,
+    student: { ...pending.student, invitation: { status: 'accepted', canRetry: true } } });
+  post.mockResolvedValue({ invitation: { status: 'accepted', canRetry: true } });
+  render(<Harness initial={`/admin/students/${student.id}`} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Send invitation' }));
+  const feedback = 'Invitation submitted to the email provider. Inbox delivery is not guaranteed.';
+  expect(await screen.findByText(feedback)).toBeInTheDocument();
+  expect(screen.getAllByText(feedback)).toHaveLength(1);
+});
+
+test.each([
+  { outcome: 'an uncertain response', error: new TypeError('Network response lost'), feedback: /Outcome not confirmed/ },
+  { outcome: 'an identity mismatch', error: Object.assign(new Error('Identity mismatch'), { status: 503, code: 'identity_inconsistent' }), feedback: /Account identity needs operator review/ },
+])('creation with $outcome retains input and reviews existing accounts without another invitation', async ({ error, feedback }) => {
+  post.mockRejectedValue(error);
   get.mockResolvedValue(page([{ ...student, activeHoldCount: 0 }]));
   render(<StudentForm onClose={vi.fn()} onSaved={vi.fn()} />);
   for (const [label, value] of [
-    ['First name', 'Demo'], ['Last name', 'Student'], ['University email', student.email], ['Student number', student.studentNumber],
-    ['Department', student.department!], ['Program', student.program!],
+    ['First name', 'Demo'], ['Last name', 'Student'], ['University email', student.email],
+    ['Department', 'Computer Science'], ['Program', student.program!],
   ]) fireEvent.change(screen.getByLabelText(label), { target: { value } });
   fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
-  expect(await screen.findByText(/Outcome not confirmed/)).toBeInTheDocument();
+  expect(await screen.findByText(feedback)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Create account' })).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: 'Refresh and review record' }));
   expect(await screen.findByRole('button', { name: 'Open matching account' })).toBeInTheDocument();
@@ -256,6 +351,23 @@ test('pending invitations offer resend while missing Auth metadata disables mail
   render(<Harness initial={`/admin/students/${student.id}`} />);
   expect(await screen.findByText(/Authentication identity is unavailable/)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Resend invitation' })).not.toBeInTheDocument();
+  expect(post).not.toHaveBeenCalled();
+});
+
+test.each(['queued', 'failed', 'sending', 'unknown'] as const)('persisted %s invitation state offers only safe delivery actions', async status => {
+  get.mockResolvedValue({ ...detail, student: { ...detail.student, auth: { ...detail.student.auth, emailConfirmedAt: null },
+    invitation: { status, canRetry: status === 'queued' || status === 'failed' } } });
+  const { unmount } = render(<Harness initial={`/admin/students/${student.id}`} />);
+  if (status === 'queued' || status === 'failed') {
+    expect(await screen.findByRole('button', { name: 'Send invitation' })).toBeEnabled();
+    expect(screen.getByRole('status')).toHaveTextContent(status === 'queued' ? 'pending' : 'student account is saved');
+  } else {
+    expect(await screen.findByRole('button', { name: 'Resend invitation' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent(status === 'unknown' ? 'Operator review' : 'in progress');
+    unmount();
+    render(<Harness initial={`/admin/students/${student.id}`} />);
+    expect(await screen.findByRole('button', { name: 'Resend invitation' })).toBeDisabled();
+  }
   expect(post).not.toHaveBeenCalled();
 });
 
