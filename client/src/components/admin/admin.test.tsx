@@ -116,11 +116,18 @@ test('email changes require shared-login confirmation and duplicate errors prese
   patch.mockRejectedValue(Object.assign(new Error('Email already exists'), { status: 409 }));
   render(<StudentForm student={student} onClose={vi.fn()} onSaved={vi.fn()} />);
   fireEvent.change(screen.getByLabelText('University email'), { target: { value: 'changed@example.invalid' } });
-  vi.mocked(window.confirm).mockReturnValueOnce(false);
   fireEvent.click(screen.getByRole('button', { name: 'Save changes' })); expect(patch).not.toHaveBeenCalled();
+  expect(screen.getByText(/This changes the student's login in SIS and LMS/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Keep editing' })).toHaveFocus();
+  screen.getByRole('button', { name: 'Close' }).focus();
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Close' }), { key: 'Tab', shiftKey: true });
+  expect(screen.getByRole('button', { name: 'Confirm email change' })).toHaveFocus();
+  fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+  expect(screen.getByRole('button', { name: 'Save changes' })).toHaveFocus();
   fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm email change' }));
   expect(await screen.findByText('Email already exists')).toBeInTheDocument();
-  expect(window.confirm).toHaveBeenLastCalledWith(expect.stringContaining('SIS and LMS'));
+  expect(window.confirm).not.toHaveBeenCalled();
   expect(screen.getByLabelText('University email')).toHaveValue('changed@example.invalid');
 });
 
@@ -155,6 +162,8 @@ test('detail serializes account actions and disables email requests during coold
   post.mockRejectedValueOnce(Object.assign(new Error('Rate limited'), { status: 429, retryAfter: 1 }));
   render(<Harness initial={`/admin/students/${student.id}`} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Send recovery instructions' }));
+  expect(post).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm email request' }));
   expect(await screen.findByText('Try again in 1 seconds.')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Send recovery instructions' })).toBeDisabled();
   await waitFor(() => expect(screen.getByRole('button', { name: 'Send recovery instructions' })).toBeEnabled(), { timeout: 2200 });
@@ -166,6 +175,8 @@ test('uncertain mail delivery does not show success or enable an automatic resen
   post.mockRejectedValue(Object.assign(new Error('Unknown delivery'), { status: 503, code: 'email_delivery_unknown' }));
   render(<Harness initial={`/admin/students/${student.id}`} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Send recovery instructions' }));
+  expect(post).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm email request' }));
   expect(await screen.findByText(/Outcome not confirmed/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Refresh and review record' }));
   expect(await screen.findByText(/Email delivery still needs operator review/)).toBeInTheDocument();
@@ -301,6 +312,7 @@ test('resend outcomes appear once in the persisted invitation panel', async () =
   post.mockResolvedValue({ invitation: { status: 'accepted', canRetry: true } });
   render(<Harness initial={`/admin/students/${student.id}`} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Send invitation' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm email request' }));
   const feedback = 'Invitation submitted to the email provider. Inbox delivery is not guaranteed.';
   expect(await screen.findByText(feedback)).toBeInTheDocument();
   expect(screen.getAllByText(feedback)).toHaveLength(1);
@@ -332,7 +344,13 @@ test('pending account actions serialize requests and refresh the committed acces
   post.mockReturnValue(new Promise(resolve => { finish = resolve; }));
   render(<Harness initial={`/admin/students/${student.id}`} />);
   const deactivate = await screen.findByRole('button', { name: 'Deactivate' });
-  fireEvent.click(deactivate); fireEvent.click(deactivate);
+  fireEvent.click(deactivate);
+  expect(post).not.toHaveBeenCalled();
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+  expect(deactivate).toHaveFocus();
+  fireEvent.click(deactivate);
+  const confirm = screen.getByRole('button', { name: 'Confirm deactivation' });
+  fireEvent.click(confirm); fireEvent.click(confirm);
   expect(post).toHaveBeenCalledOnce();
   expect(screen.getByRole('button', { name: 'Edit profile' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Send recovery instructions' })).toBeDisabled();

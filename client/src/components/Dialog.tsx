@@ -10,7 +10,7 @@ export function Dialog({ title, busy = false, onClose, restoreFocusTo, children 
   useEffect(() => {
     const previous = restoreFocusTo ?? document.activeElement as HTMLElement | null;
     const element = panel.current!;
-    const focusable = () => [...element.querySelectorAll<HTMLElement>('*')].filter(item => item.matches('button, input, select, textarea, [tabindex]') && !item.matches(':disabled') && !item.hidden && item.tabIndex >= 0);
+    const focusable = () => [...element.querySelectorAll<HTMLElement>('*')].filter(item => item.matches('button, input, select, textarea, summary, [tabindex]') && !item.matches(':disabled') && !item.closest('[hidden]') && item.tabIndex >= 0);
     (focusable()[0] ?? element).focus();
     function keydown(event: KeyboardEvent) {
       if (event.key === 'Escape') { event.preventDefault(); if (!busyRef.current) closeRef.current(); }

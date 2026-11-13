@@ -160,6 +160,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 }
 .detail-header > div:nth-child(2) { min-width: 0; flex: 1; }
 .detail-header .supporting-copy { overflow-wrap: anywhere; }
+.detail-tags .academic-status { text-transform: uppercase; }
 
 /* Student Library self-service */
 .library-account-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:32px }
@@ -178,3 +179,57 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .student-avatar { display: inline-flex; align-items: center; justify-content: center; object-fit: cover; overflow: hidden; flex-shrink: 0; }
 .student-avatar > svg { width: 55%; height: 55%; }
 .student-photo-field .student-photo-preview { margin: 0; }
+
+/* Directory controls share the console's navy, warm borders, and teal focus. */
+.student-filters { gap: 14px 12px; padding: 18px; border: 1px solid #e2dfd8; border-radius: 8px; background: #fbfaf7; }
+.student-filters > label { flex: 1 1 140px; color: #526078; font-size: 11px; font-weight: 700; }
+.student-filters > .student-search-field { flex: 2 1 270px; }
+.student-filters input, .student-filters select { width: 100%; min-width: 0; height: 40px; border: 1px solid #d9d8d3; border-radius: 5px; padding: 0 11px; color: #33415e; background-color: #fff; font: inherit; font-size: 12px; font-weight: 400; transition: border-color .15s, box-shadow .15s; }
+.student-filters input::placeholder { color: #8a93a0; }
+.student-search-control { position: relative; display: flex; align-items: center; }
+.student-search-control > svg { position: absolute; left: 12px; color: #7d8794; pointer-events: none; }
+.student-search-control input { padding-left: 36px; }
+.student-filters > button { min-height: 40px; white-space: nowrap; }
+.admin-shell select, .admin-modal select { appearance: none; padding-right: 34px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23526078' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-position: right 10px center; background-repeat: no-repeat; font-family: inherit; cursor: pointer; }
+.admin-shell select option, .admin-modal select option { color: #33415e; background: #fff; }
+.admin-form label, .admin-shell .statement-selector { font-size: 12px; font-weight: 600; }
+.admin-form input, .admin-form select { min-width: 0; width: 100%; font-family: inherit; font-weight: 400; }
+.student-filters input:hover, .student-filters select:hover, .admin-form input:hover:not(:disabled), .admin-form select:hover:not(:disabled), .admin-shell .pagination select:hover, .admin-shell .statement-selector select:hover { border-color: #a3afa9; }
+.student-filters input:focus-visible, .student-filters select:focus-visible, .admin-form input:focus-visible, .admin-form select:focus-visible, .admin-shell .pagination select:focus-visible, .admin-shell .statement-selector select:focus-visible { outline: 2px solid #4a7e78; outline-offset: 2px; border-color: #4a7e78; box-shadow: 0 0 0 3px #4a7e7814; }
+.admin-form input:disabled, .admin-form select:disabled { color: #7d8794; background-color: #f3f2ed; cursor: not-allowed; }
+.admin-form small { color: #7d8794; font-size: 11px; line-height: 1.6; }
+.student-photo-field input[type="file"] { height: auto; padding: 7px; color: #647089; background: #fbfaf7; }
+.student-photo-field input::file-selector-button { margin-right: 12px; border: 1px solid #d9d8d3; border-radius: 4px; padding: 8px 12px; color: #354064; background: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.student-photo-field input::file-selector-button:hover { border-color: #4a7e78; background: #f0f5f1; }
+.review-record { border: 1px solid #e2dfd8; border-radius: 6px; padding: 14px; color: #526078; font-size: 12px; background: #fbfaf7; }
+.review-record summary { color: #33415e; font-weight: 700; cursor: pointer; }
+.review-record summary:focus-visible { outline: 2px solid #4a7e78; outline-offset: 3px; }
+.review-record dt { color: #7d8794; }
+.account-confirmation { grid-column: 1 / -1; padding: 16px; border: 1px solid #ead9b1; border-radius: 6px; background: #fff9e9; color: #526078; overflow-wrap: anywhere; }
+.account-confirmation h3 { margin: 0 0 8px; color: #33415e; font-size: 15px; }
+.account-confirmation p { margin: 0 0 12px; font-size: 12px; line-height: 1.7; }
+.account-confirmation p:last-child { margin-bottom: 0; }
+.account-confirmation + .modal-actions { margin-top: 18px; }
+.modal-actions[hidden] { display: none; }
+.admin-secondary:hover:not(:disabled), .pagination button:hover:not(:disabled) { border-color: #9caaa4; background: #f3f6f2; }
+.danger-button:hover:not(:disabled) { border-color: #b66a58; background: #faeae4; }
+.admin-shell .record-tabs button { font: inherit; font-size: 12px; }
+@supports (appearance: base-select) {
+  .admin-shell select, .admin-modal select, .admin-shell select::picker(select), .admin-modal select::picker(select) { appearance: base-select; }
+  .admin-shell select, .admin-modal select { background-image: none; padding-right: 11px; align-items: center; }
+  .admin-shell select::picker-icon, .admin-modal select::picker-icon { color: #647089; transition: rotate .15s; }
+  .admin-shell select:open::picker-icon, .admin-modal select:open::picker-icon { rotate: 180deg; }
+  .admin-shell select::picker(select), .admin-modal select::picker(select) { margin-top: 6px; padding: 5px; border: 1px solid #dedbd3; border-radius: 7px; background: #fff; box-shadow: 0 10px 28px #17274624; font: 12px 'DM Sans', system-ui, sans-serif; }
+  .admin-shell select option, .admin-modal select option { min-height: 36px; padding: 9px 12px; border-radius: 4px; }
+  .admin-shell select option:hover, .admin-shell select option:focus, .admin-modal select option:hover, .admin-modal select option:focus { background: #f0f5f1; color: #1c5e61; }
+  .admin-shell select option:checked, .admin-modal select option:checked { background: #e7f0e9; color: #1c5e61; font-weight: 600; }
+}
+@media (max-width: 680px) {
+  .student-filters { padding: 14px; }
+  .student-filters > label, .student-filters > .student-search-field { flex-basis: 100%; }
+  .student-filters > button { width: 100%; }
+  .admin-shell .pagination { justify-content: flex-start; }
+  .admin-shell .pagination > span { flex-basis: 100%; }
+  .admin-modal { padding: 20px; }
+  .admin-modal .modal-actions { flex-wrap: wrap; }
+}

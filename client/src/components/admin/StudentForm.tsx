@@ -21,6 +21,10 @@ export function StudentForm({ student, onClose, onSaved, onReview, restoreFocusT
   const [values, setValues] = useState(() => studentValues(student));
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [confirmEmail, setConfirmEmail] = useState(false);
+  const emailCancel = useRef<HTMLButtonElement>(null);
+  const saveButton = useRef<HTMLButtonElement>(null);
+  const wasConfirmingEmail = useRef(false);
   const [photo, setPhoto] = useState<File>();
   const [photoPreview, setPhotoPreview] = useState('');
   const photoInput = useRef<HTMLInputElement>(null);
@@ -36,6 +40,12 @@ export function StudentForm({ student, onClose, onSaved, onReview, restoreFocusT
   useEffect(() => {
     if (photoPreview) return () => URL.revokeObjectURL(photoPreview);
   }, [photoPreview]);
+
+  useEffect(() => {
+    if (confirmEmail) emailCancel.current?.focus();
+    else if (wasConfirmingEmail.current) saveButton.current?.focus();
+    wasConfirmingEmail.current = confirmEmail;
+  }, [confirmEmail]);
 
   function choosePhoto(event: ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0];
@@ -54,13 +64,14 @@ export function StudentForm({ student, onClose, onSaved, onReview, restoreFocusT
     if (photoInput.current) photoInput.current.value = '';
   }
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function submit(event?: FormEvent, emailConfirmed = false) {
+    event?.preventDefault();
     if (inFlight.current || reviewRequired || cooldown.remaining || unchanged) return;
     setError('');
     let payload: ReturnType<typeof studentPayload>;
     try { payload = studentPayload(values, baseline); } catch (validation) { setError((validation as Error).message); return; }
-    if (baseline && payload.email && !window.confirm(`Change the shared university login from ${baseline.email} to ${payload.email}? This changes the student's login in SIS and LMS.`)) return;
+    if (baseline && payload.email && !emailConfirmed) { setConfirmEmail(true); return; }
+    setConfirmEmail(false);
     inFlight.current = true; setSaving(true);
     let committed = false;
     let accountAttempted = false;
@@ -111,7 +122,7 @@ export function StudentForm({ student, onClose, onSaved, onReview, restoreFocusT
     {matched && <button className="admin-secondary" disabled={saving} onClick={() => { void onSaved(matched.id); }}>Open matching account</button>}
     {cooldown.remaining > 0 && <p role="status">Try again in {cooldown.remaining} seconds.</p>}
     <form className="admin-form" onSubmit={submit} noValidate>
-      <fieldset disabled={saving}><legend className="sr-only">Student profile</legend>
+      <fieldset disabled={saving || confirmEmail}><legend className="sr-only">Student profile</legend>
         <div className="student-number-field">
           <label>Student number<input value={baseline?.studentNumber ?? ''} placeholder="Assigned automatically when saved" disabled aria-describedby={!baseline ? 'student-number-help' : undefined} /></label>
           {!baseline && <small id="student-number-help">The next student number is assigned automatically when the account is created.</small>}
@@ -133,7 +144,8 @@ export function StudentForm({ student, onClose, onSaved, onReview, restoreFocusT
           {(photo || values.avatarUrl) && <button type="button" className="admin-secondary" onClick={removePhoto}>Remove photo</button>}
         </div>
       </fieldset>
-      <div className="modal-actions"><button type="button" className="admin-secondary" disabled={saving} onClick={onClose}>Cancel</button><button className="admin-primary" disabled={saving || unchanged || reviewRequired || cooldown.remaining > 0}>{saving ? 'Saving…' : baseline ? 'Save changes' : 'Create account'}</button></div>
+      {confirmEmail && <section className="account-confirmation" aria-labelledby="email-confirm-title"><h3 id="email-confirm-title">Change university login?</h3><p>Change the shared university login from <strong>{baseline?.email}</strong> to <strong>{values.email.trim()}</strong>? This changes the student's login in SIS and LMS.</p><div className="modal-actions"><button ref={emailCancel} type="button" className="admin-secondary" onClick={() => { setConfirmEmail(false); saveButton.current?.focus(); }}>Keep editing</button><button type="button" className="admin-primary" onClick={() => { void submit(undefined, true); }}>Confirm email change</button></div></section>}
+      <div className="modal-actions" hidden={confirmEmail}><button type="button" className="admin-secondary" disabled={saving} onClick={onClose}>Cancel</button><button ref={saveButton} className="admin-primary" disabled={saving || unchanged || reviewRequired || cooldown.remaining > 0}>{saving ? 'Saving…' : baseline ? 'Save changes' : 'Create account'}</button></div>
     </form>
   </Dialog>;
 }
