@@ -1,3 +1,29 @@
+/* Student profile */
+.profile-chip { border: 0; padding: 4px; background: transparent; cursor: pointer; text-align: left; }
+.student-profile-summary { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; }
+.student-profile-summary .student-avatar { margin: 0; }
+.student-profile-summary > div { flex: 1; min-width: 0; }
+.student-profile-summary h2 { margin: 7px 0; font-size: 20px; overflow-wrap: anywhere; }
+.student-profile-summary > div > p:last-child { margin: 0; color: #758094; font-size: 12px; }
+.student-profile-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.student-profile-details { display: grid; gap: 17px; min-width: 0; }
+.student-profile-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; margin: 18px 0 0; }
+.student-profile-fields > div { border-top: 1px solid #eeeae3; padding: 14px 0; }
+.student-profile-fields dt { color: #7d8794; font-size: 11px; }
+.student-profile-fields dd { margin: 6px 0 0; color: #33415e; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.student-profile-note { color: #758094; font-size: 11px; line-height: 1.65; margin: 14px 0 0; }
+.student-password-card form { gap: 15px; margin-top: 22px; }
+.student-password-field { display: grid; gap: 8px; min-width: 0; }
+.student-password-field .input-wrap input { min-width: 0; }
+.student-password-field .input-wrap svg { flex-shrink: 0; }
+.student-password-card form .student-profile-note { margin: 0; }
+@media (max-width: 950px) { .student-profile-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) {
+  .student-profile-summary { flex-wrap: wrap; gap: 13px; }
+  .student-profile-summary > div { flex-basis: calc(100% - 90px); }
+  .student-profile-fields { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* Holds, Library-pending, and administrator-handoff views */
 .holds-list { display: grid; gap: 12px; margin-top: 16px; }
 .hold-card { grid-template-columns: auto minmax(0, 1fr); border: 1px solid #e2dfd8; border-radius: 8px; padding: 17px; background: rgba(255,255,255,.92); }

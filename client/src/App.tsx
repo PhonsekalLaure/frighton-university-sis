@@ -11,6 +11,7 @@ import { GradesPage } from './pages/GradesPage';
 import { BillingPage } from './pages/BillingPage';
 import { HoldsPage } from './pages/HoldsPage';
 import { LibraryPage } from './pages/LibraryPage';
+import { ProfilePage } from './pages/ProfilePage';
 import { AdminConsolePage } from './pages/AdminConsolePage';
 import { SetPasswordPage } from './pages/SetPasswordPage';
 import type { SignedInUser } from './types/dashboard';
@@ -25,10 +26,11 @@ function routeForUser(route: string, user: SignedInUser | null) {
 }
 function viewFromPath(route: string): PortalView {
   const value = route.split('?')[0].split('/')[1];
-  return value === 'schedule' || value === 'grades' || value === 'billing' || value === 'library' || value === 'holds' ? value : 'dashboard';
+  return value === 'schedule' || value === 'grades' || value === 'billing' || value === 'library' || value === 'holds' || value === 'profile' ? value : 'dashboard';
 }
 
 export function App({ initialPasswordLink = null }: { initialPasswordLink?: PasswordLink | null }) {
+  const [loginNotice, setLoginNotice] = useState('');
   const [user, setUser] = useState<SignedInUser | null>(null);
   const [route, setRoute] = useState(currentRoute);
   const [passwordLink, setPasswordLink] = useState(initialPasswordLink);
@@ -37,7 +39,7 @@ export function App({ initialPasswordLink = null }: { initialPasswordLink?: Pass
   const [attempt, setAttempt] = useState(0);
   const passwordRoute = route.split('?')[0] === '/set-password';
   const activeView = viewFromPath(route);
-  const pageTitle = passwordRoute ? 'Password setup' : !user ? 'Sign in' : user.role === 'admin' ? 'Administrator console' : ({ dashboard: 'Overview', schedule: 'My schedule', grades: 'Grades', billing: 'Billing', library: 'Library', holds: 'Holds' })[activeView];
+  const pageTitle = passwordRoute ? 'Password setup' : !user ? 'Sign in' : user.role === 'admin' ? 'Administrator console' : ({ dashboard: 'Overview', schedule: 'My schedule', grades: 'Grades', billing: 'Billing', library: 'Library', holds: 'Holds', profile: 'Student profile' })[activeView];
   useEffect(() => { document.title = `${pageTitle} | Frighton University SIS`; }, [pageTitle]);
 
   useEffect(() => {
@@ -103,15 +105,17 @@ export function App({ initialPasswordLink = null }: { initialPasswordLink?: Pass
   if (passwordRoute) return <SetPasswordPage link={passwordLink} onClearLink={() => { clearPasswordLink(passwordLink); setPasswordLink(null); setUser(null); resetSessionRequests(); }} onComplete={finishPassword} />;
   if (session.checking) return <div className="boot-screen">Loading Frighton SIS…</div>;
   if (session.error) return <main className="login-page"><ErrorState message={session.error.message} forbidden={session.error.status === 403} onRetry={() => { setSession({ checking: true }); setAttempt(value => value + 1); }} /></main>;
-  if (!user) return <LoginPage onSignedIn={signedInUser => {
+  if (!user) return <LoginPage notice={loginNotice} onSignedIn={signedInUser => {
     resetSessionRequests();
     setUser(signedInUser);
+    setLoginNotice('');
     setSession({ checking: false });
     navigatePath(signedInUser.role === 'admin' ? '/admin' : '/dashboard');
   }} />;
   if (route.split('?')[0].startsWith('/admin') && user.role !== 'admin') return <main className="admin-handoff-page"><section className="admin-handoff-card"><ShieldCheck size={31} /><p className="eyebrow">ACCESS DENIED</p><h1>Administrator access required.</h1><p className="supporting-copy">This area is only available to active administrator accounts.</p><button className="logout-button" onClick={() => navigatePath('/dashboard')}>Return to student portal</button><button className="logout-button" onClick={logout}>Sign out</button></section></main>;
   if (user.role === 'admin') return <AdminConsolePage user={user} onLogout={logout} path={route} navigate={navigatePath} />;
   return <AppShell user={user} activeView={activeView} onNavigate={navigate} onLogout={logout}>
+    {activeView === 'profile' && <ProfilePage onRequireLogin={message => { setLoginNotice(message); finishPassword(); }} />}
     {activeView === 'dashboard' && <DashboardPage onNavigate={navigate} />}
     {activeView === 'schedule' && <SchedulePage />}
     {activeView === 'grades' && <GradesPage />}

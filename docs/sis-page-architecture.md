@@ -8,7 +8,7 @@ Frighton SIS is a student self-service portal with a distinct administrator surf
 
 - Only active `student` and `admin` directory accounts may sign in.
 - The implemented dashboard endpoint is student-only: `GET /api/v1/dashboard/me`.
-- The student profile backend provides `GET /api/v1/profile/me` and `POST /api/v1/profile/me/password` for basic details and a current-password-verified password change. Its frontend is pending; see [the profile API handoff](student-profile-backend.md).
+- The Student profile page at `/profile` uses `GET /api/v1/profile/me` and `POST /api/v1/profile/me/password` for read-only basic details and a current-password-verified password change. It returns to login after confirmed or uncertain updates, preserves session-revocation feedback, and never automatically replays password submissions; see [the profile API handoff](student-profile-backend.md).
 - The dashboard reads academic assignments from `academic_records`; this SIS does not model enrollment, registration, waitlists, section capacity, instructor accounts, or registrar accounts.
 - The React client implements sign-in, session restoration, browser navigation, and a protected student shell. Dashboard, Schedule, Grades, and Billing are available student pages; Holds and the gated Library self-service page are implemented.
 - SIS owns student identity, borrowing eligibility, and university holds. The Library Management System (LMS) owns its catalog, reservations, loans, due dates, and fines.
@@ -26,6 +26,7 @@ graph TD
     Shell --> Billing["Billing /billing"]
     Shell --> Library["Library /library"]
     Shell --> Holds["Holds /holds"]
+    Shell --> Profile["Student profile /profile"]
     Auth --> Admin["Separate Administrator Console /admin"]
 ```
 

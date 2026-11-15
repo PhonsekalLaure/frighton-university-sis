@@ -4,12 +4,31 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { App } from './App';
 import { apiGet, apiPost } from './lib/api';
 import { capturePasswordLink } from './lib/passwordLink';
-import { adminDashboard, adminUser, dashboard, schedule, studentUser } from './test/fixtures';
+import { adminDashboard, adminUser, dashboard, schedule, student, studentUser } from './test/fixtures';
 
 vi.mock('./lib/api', async importOriginal => ({ ...await importOriginal<typeof import('./lib/api')>(), apiGet: vi.fn(), apiPost: vi.fn() }));
 beforeEach(() => { vi.resetAllMocks(); window.history.replaceState({}, '', '/'); });
 afterEach(cleanup);
 const get = vi.mocked(apiGet), post = vi.mocked(apiPost);
+
+test('profile direct link and password completion clear the session and show the result at login', async () => {
+  window.history.replaceState({}, '', '/profile');
+  get.mockImplementation(async path => path === '/api/auth/me' ? { user: studentUser } : { profile: student });
+  post.mockResolvedValue({ requiresLogin: true, sessionsRevoked: false });
+  render(<App />);
+  expect(await screen.findByRole('heading', { name: 'Student profile' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Student profile' })).toHaveAttribute('aria-current', 'page');
+  expect(document.title).toBe('Student profile | Frighton University SIS');
+  fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'old password 123' } });
+  fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new password 123' } });
+  fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'new password 123' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Update password' }));
+  expect(await screen.findByRole('heading', { name: 'Sign in to your account' })).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('Other sessions could not be confirmed signed out.');
+  expect(window.location.pathname).toBe('/login');
+  expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
+  expect(post).toHaveBeenCalledOnce();
+});
 
 test('signing in from a schedule link renders dashboard at the dashboard URL', async () => {
   window.history.replaceState({}, '', '/schedule');

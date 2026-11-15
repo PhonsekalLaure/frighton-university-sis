@@ -1,6 +1,6 @@
 # Student profile backend
 
-The profile API serves the authenticated, active SIS student. It uses the existing shared `users` directory and SIS `profiles` table. No new migration or environment variable is needed; the existing account-request limiter migration must already be installed. The profile page frontend is not included in this backend change.
+The profile API serves the authenticated, active SIS student. It uses the existing shared `users` directory and SIS `profiles` table. No new migration or environment variable is needed; the existing account-request limiter migration must already be installed. The frontend is implemented at `/profile`, available through Student profile in the sidebar or the top-bar account name. It displays read-only personal and academic details and provides a password-change form consistent with the student portal.
 
 Both endpoints require the existing SIS HTTP-only session cookies or a valid bearer token, plus student authorization. Administrators cannot use these endpoints. The server derives the student ID and email from authentication. There is no route for reading another student's profile or editing personal/academic details.
 
