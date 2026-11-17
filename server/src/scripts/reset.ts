@@ -46,7 +46,7 @@ export async function resetSISData(client?: SupabaseClient): Promise<void> {
   for (const [table] of SIS_TABLES_IN_DELETE_ORDER) {
     console.log(`- ${table}: ${deletedCounts[table]}`);
   }
-  console.log('Preserved LMS/shared tables: books, borrow_records, reservations, users, and Auth users.');
+  console.log('This reset preserved remaining shared directory/Auth accounts and LMS tables (books, borrow_records, reservations).');
 }
 
 if (process.argv[1]?.endsWith('reset.ts') || process.argv[1]?.endsWith('reset.js')) {
