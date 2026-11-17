@@ -38,19 +38,19 @@ graph TD
 - **Data returned**:
   - Digital ID: name, `studentNumber`, program, department, year level, academic status, and avatar.
   - Active academic term.
-  - Metrics: current academic credits, cumulative GPA, earned credits, and active hold count.
+  - Metrics: current academic units, cumulative GPA, earned units, and active hold count.
   - Billing: current-term total billed, completed payments, outstanding balance, account status, and due date.
   - Unresolved student holds.
   - Current-term classes scheduled on the current `Asia/Manila` weekday.
 
-The dashboard must render assignment language such as "current academic credits"; it must not imply that it can register a student for a class.
+The dashboard must render assignment language such as "current academic units"; it must not imply that it can register a student for a class.
 
 ## Roadmap views
 
 | Route | Audience | Backing system/tables | Notes |
 | --- | --- | --- | --- |
 | `/schedule` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | Current assignment list, instructors, rooms, and published meetings are implemented. A weekly calendar is outside this baseline. |
-| `/grades` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | Static transcript, term/cumulative GPA, credit totals, and distinct grade statuses are implemented. |
+| `/grades` | Student | `academic_records`, `course_sections`, `courses`, `academic_terms` | Static transcript, term/cumulative GPA, unit totals, and distinct grade statuses are implemented. |
 | `/billing` | Student | `student_accounts`, `student_payments`, `academic_terms` | Current and historical statements, charges, and receipt ledgers are implemented with Manila timestamps and calendar due dates. No online payments. |
 | `/library` | Student | LMS `books`, `reservations`, `borrow_records` | The default-off feature gate shows a pending screen; enabling it exposes catalog, reservations, current loans, due dates, and unpaid amounts. |
 | `/holds` | Student | SIS `student_holds` | `GET /api/v1/holds/me` and the read-only account-restrictions page are implemented. Library restrictions use `hold_type = 'library_debt'`. |

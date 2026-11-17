@@ -1,29 +1,27 @@
+import { curriculumFor } from './curricula.js';
+import { students } from './students.js';
 import type { AcademicRecordSeed } from './types.js';
 
-// Final grades are historical, static transcript snapshots. Fall 2026 contains
-// only in-progress assignments and is the sole active schedule term.
-export const academicRecords: readonly AcademicRecordSeed[] = [
-  { studentNumber: 'STU-2026-0002', courseCode: 'HIST-105', termCode: 'FALL-2025', sectionNumber: '01', grade: 'A', isCurrent: false },
-  { studentNumber: 'STU-2026-0003', courseCode: 'CS-220', termCode: 'FALL-2025', sectionNumber: '01', grade: 'D', isCurrent: false },
-  { studentNumber: 'STU-2026-0004', courseCode: 'CS-101', termCode: 'FALL-2025', sectionNumber: '01', grade: 'A', isCurrent: false },
-  { studentNumber: 'STU-2026-0005', courseCode: 'HIST-105', termCode: 'FALL-2025', sectionNumber: '01', grade: 'B+', isCurrent: false },
-  { studentNumber: 'STU-2026-0008', courseCode: 'CS-101', termCode: 'FALL-2025', sectionNumber: '01', grade: 'B', isCurrent: false },
-  { studentNumber: 'STU-2026-0004', courseCode: 'CS-220', termCode: 'SPRING-2026', sectionNumber: '01', grade: 'A-', isCurrent: false },
-  { studentNumber: 'STU-2026-0006', courseCode: 'CS-220', termCode: 'SPRING-2026', sectionNumber: '01', grade: 'B+', isCurrent: false },
-  { studentNumber: 'STU-2026-0007', courseCode: 'HIST-105', termCode: 'SPRING-2026', sectionNumber: '01', grade: 'A-', isCurrent: false },
-  { studentNumber: 'STU-2026-0008', courseCode: 'CS-220', termCode: 'SPRING-2026', sectionNumber: '01', grade: 'A', isCurrent: false },
-  { studentNumber: 'STU-2026-0009', courseCode: 'CS-101', termCode: 'SPRING-2026', sectionNumber: '01', grade: 'A', isCurrent: false },
-  { studentNumber: 'STU-2026-0010', courseCode: 'CS-220', termCode: 'SPRING-2026', sectionNumber: '01', grade: 'B', isCurrent: false },
+const finalGrades = ['A-', 'B+', 'B', 'A', 'B+', 'A-'] as const;
+const probationGrades = [
+  ['C', 'C', 'D', 'F', 'D', 'B-'],
+  ['C', 'C-', 'D', 'D', 'D', 'B-'],
+] as const;
 
-  { studentNumber: 'STU-2026-0001', courseCode: 'CS-101', termCode: 'FALL-2026', sectionNumber: '01', grade: 'IP', isCurrent: true },
-  { studentNumber: 'STU-2026-0001', courseCode: 'HIST-105', termCode: 'FALL-2026', sectionNumber: '01', grade: 'IP', isCurrent: true },
-  { studentNumber: 'STU-2026-0002', courseCode: 'CS-101', termCode: 'FALL-2026', sectionNumber: '01', grade: 'IP', isCurrent: true },
-  { studentNumber: 'STU-2026-0003', courseCode: 'HIST-105', termCode: 'FALL-2026', sectionNumber: '01', grade: 'IP', isCurrent: true },
-  { studentNumber: 'STU-2026-0004', courseCode: 'CS-220', termCode: 'FALL-2026', sectionNumber: '01', grade: 'IP', isCurrent: true },
-  { studentNumber: 'STU-2026-0005', courseCode: 'CS-101', termCode: 'FALL-2026', sectionNumber: '01', grade: 'IP', isCurrent: true },
-  { studentNumber: 'STU-2026-0006', courseCode: 'CS-220', termCode: 'FALL-2026', sectionNumber: '01', grade: 'IP', isCurrent: true },
-  { studentNumber: 'STU-2026-0007', courseCode: 'HIST-105', termCode: 'FALL-2026', sectionNumber: '01', grade: 'IP', isCurrent: true },
-  { studentNumber: 'STU-2026-0008', courseCode: 'CS-220', termCode: 'FALL-2026', sectionNumber: '01', grade: 'IP', isCurrent: true },
-  { studentNumber: 'STU-2026-0009', courseCode: 'CS-101', termCode: 'FALL-2026', sectionNumber: '01', grade: 'IP', isCurrent: true },
-  { studentNumber: 'STU-2026-0010', courseCode: 'CS-220', termCode: 'FALL-2026', sectionNumber: '01', grade: 'IP', isCurrent: true },
-];
+export const academicRecords: readonly AcademicRecordSeed[] = students.flatMap((student, studentIndex) => {
+  const curriculum = curriculumFor(student);
+  const plans = [
+    ...(curriculum.previous ? [
+      { termCode: 'AY2025-2026-T1', subjects: curriculum.previous[0], isCurrent: false },
+      { termCode: 'AY2025-2026-T2', subjects: curriculum.previous[1], isCurrent: false },
+    ] : []),
+    { termCode: 'AY2026-2027-T1', subjects: curriculum.current, isCurrent: true },
+  ];
+  return plans.flatMap((plan, termIndex) => plan.subjects.map((courseCode, subjectIndex) => ({
+    studentNumber: student.studentNumber, courseCode, termCode: plan.termCode,
+    sectionNumber: `${curriculum.key}-01`, isCurrent: plan.isCurrent,
+    grade: plan.isCurrent ? 'IP' : student.academicStatus === 'probation'
+      ? probationGrades[termIndex][subjectIndex]
+      : finalGrades[(studentIndex + termIndex + subjectIndex) % finalGrades.length],
+  })));
+});

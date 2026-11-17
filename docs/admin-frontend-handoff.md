@@ -262,7 +262,7 @@ Fetch the single `GET /students/:studentId` aggregation. Recommended sections/ta
 | Account activity | `student.auth`: invited, email-confirmed, and last-sign-in timestamps. Null means unavailable/missing identity, not an invitation to create another account. |
 | Overview | `dashboard`: academic metrics, current term, active holds, current billing summary, Manila-local today's schedule. |
 | Schedule | `schedule.currentTerm`, `schedule.classes`; no assignment editing. |
-| Grades | `grades.summary`, `grades.terms`; use returned GPA/credit totals and `gradeStatus` (`final`, `in_progress`, `withdrawn`, `not_recorded`). |
+| Grades | `grades.summary`, `grades.terms`; use returned GPA/unit totals and `gradeStatus` (`final`, `in_progress`, `withdrawn`, `not_recorded`). |
 | Holds | `holds.activeHolds`, `holds.resolvedHolds`; show source, reason, placed/resolved dates. No Resolve/Edit/Delete button. |
 | Billing | `billing.currentStatement`, `billing.statements`, charges, cashier receipts, supplied notices; read-only. |
 | Audit history link | Open `/admin/audit-logs?studentId=<student.id>`. No separate student-events endpoint exists. |

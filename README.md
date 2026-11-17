@@ -44,6 +44,10 @@ Local feature completion is separate from live email-delivery readiness. Redirec
 
 Typed entity fixtures live in `server/src/seed-data`. **Seeding writes to the database and resets matching seeded passwords.** Do not run it merely to verify UI work.
 
+The ten student fixtures have department/year-specific six-subject schedules (17–20 current units) across Monday–Friday, including separate laboratory meetings for four-unit subjects. The catalog contains 75 subjects, 120 teaching sections, and 144 academic assignments. Continuing students have two completed terms and an in-progress current term; first-year students begin in the current term. Terms use academic-year labels such as “First Term, AY 2026–2027.” Grades, schedules, and dashboard labels use units; the existing `credits` database/API fields continue to carry those unit values for compatibility.
+
+On repeat seeds, the four former seasonal term codes are renamed in place to preserve referenced term IDs. If a seasonal and replacement code both exist, the seeder stops for review before account/password changes. It upserts the revised transcript before removing obsolete assignments belonging to the ten fixture students. Other students' assignments are preserved. Existing receipt reference numbers remain unchanged.
+
 - `npm run seed`: provisions three admin and ten student Auth accounts and related data. Admins go into shared `users`; only students receive `profiles` and academic/billing records.
 - `npm run reset:sis -- --confirm`: permanently clears SIS academic/financial/profile data and SIS library-debt synchronization state while preserving shared users, Auth accounts, LMS data (including the debt outbox), and audit history.
 - `npm run setup:sis -- --confirm`: runs the reset followed by the seed.

@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { ChevronDown, ChevronRight, RotateCcw, SlidersHorizontal } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { useApiRead } from '../../lib/useApiRead';
 import { timestamp } from '../../lib/format';
 import type { AuditEvent, Page } from '../../types/admin';
@@ -7,31 +7,62 @@ import { LoadingState } from '../PageStates';
 import { AdminPageHeading, Failure, Pagination } from './shared';
 import { actionLabels } from '../../lib/adminConstants';
 
-function AuditFilters({ search, onApply }: { search: string; onApply: (params: URLSearchParams) => void }) {
+function filterValues(search: string) {
   const params = new URLSearchParams(search);
-  const [values, setValues] = useState(() => ({ action: params.get('action') ?? '', studentId: params.get('studentId') ?? '', actorId: params.get('actorId') ?? '', from: params.get('from')?.slice(0, 10) ?? '', to: params.get('to')?.slice(0, 10) ?? '' }));
-  const [error, setError] = useState('');
-  function apply(event: FormEvent) {
-    event.preventDefault(); setError('');
-    for (const key of ['studentId', 'actorId'] as const) {
-      if (values[key].trim() && !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(values[key].trim())) { setError(`${key} must be a UUID.`); return; }
-    }
-    if (values.from && values.to && values.from > values.to) { setError('Start date must not be after end date.'); return; }
-    const next = new URLSearchParams();
-    for (const key of ['action', 'studentId', 'actorId'] as const) if (values[key].trim()) next.set(key, values[key].trim());
-    if (values.from) next.set('from', `${values.from}T00:00:00.000+08:00`);
-    if (values.to) next.set('to', `${values.to}T23:59:59.999+08:00`);
-    next.set('pageSize', params.get('pageSize') ?? '25'); next.set('page', '1'); onApply(next);
+  return { action: params.get('action') ?? '', studentId: params.get('studentId') ?? '', actorId: params.get('actorId') ?? '', from: params.get('from')?.slice(0, 10) ?? '', to: params.get('to')?.slice(0, 10) ?? '' };
+}
+
+function filterError(values: ReturnType<typeof filterValues>) {
+  for (const key of ['studentId', 'actorId'] as const) {
+    if (values[key].trim() && !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(values[key].trim())) return `${key} must be a UUID.`;
   }
-  const set = (key: keyof typeof values, value: string) => setValues(current => ({ ...current, [key]: value }));
-  return <><form className="filter-bar admin-filters audit-filters" onSubmit={apply}>
+  return values.from && values.to && values.from > values.to ? 'Start date must not be after end date.' : '';
+}
+
+function AuditFilters({ search, navigate }: { search: string; navigate: (path: string) => void }) {
+  const [draft, setDraft] = useState(() => ({ source: search, values: filterValues(search) }));
+  if (draft.source !== search) {
+    const previous = filterValues(draft.source), next = filterValues(search);
+    for (const key of Object.keys(next) as (keyof typeof next)[]) {
+      if (previous[key] === next[key] || draft.values[key].trim() === next[key]) next[key] = draft.values[key];
+    }
+    setDraft({ source: search, values: next });
+  }
+  const { values } = draft;
+  const error = filterError(values);
+  useEffect(() => {
+    if (draft.source !== search || error) return;
+    const current = filterValues(search);
+    if ((Object.keys(current) as (keyof typeof current)[]).every(key => values[key].trim() === current[key])) return;
+    const apply = () => {
+      const next = new URLSearchParams();
+      for (const key of ['action', 'studentId', 'actorId'] as const) if (values[key].trim()) next.set(key, values[key].trim());
+      if (values.from) next.set('from', `${values.from}T00:00:00.000+08:00`);
+      if (values.to) next.set('to', `${values.to}T23:59:59.999+08:00`);
+      next.set('pageSize', new URLSearchParams(search).get('pageSize') ?? '25');
+      next.set('page', '1');
+      navigate(`/admin/audit-logs?${next}`);
+    };
+    if (values.studentId.trim() === current.studentId && values.actorId.trim() === current.actorId) {
+      apply();
+      return;
+    }
+    const timer = window.setTimeout(apply, 300);
+    return () => window.clearTimeout(timer);
+  }, [draft.source, values, error, search, navigate]);
+  const set = (key: keyof typeof values, value: string) => setDraft(current => ({ ...current, values: { ...current.values, [key]: value } }));
+  function clear() {
+    setDraft({ source: search, values: filterValues('') });
+    navigate('/admin/audit-logs');
+  }
+  return <><div className="filter-bar admin-filters audit-filters" role="search" aria-label="Audit filters">
     <label>Action<select value={values.action} onChange={event => set('action', event.target.value)}><option value="">All actions</option>{Object.entries(actionLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
     <label>Student UUID<input placeholder="All students" value={values.studentId} onChange={event => set('studentId', event.target.value)} /></label>
     <label>Actor UUID<input placeholder="All administrators" value={values.actorId} onChange={event => set('actorId', event.target.value)} /></label>
     <label>From (Manila)<input type="date" value={values.from} onChange={event => set('from', event.target.value)} /></label>
     <label>To (Manila)<input type="date" value={values.to} onChange={event => set('to', event.target.value)} /></label>
-    <div className="audit-filter-actions"><button className="admin-secondary"><SlidersHorizontal size={15} aria-hidden="true" />Apply filters</button><button className="admin-secondary" type="button" onClick={() => onApply(new URLSearchParams())}><RotateCcw size={15} aria-hidden="true" />Clear filters</button></div>
-  </form>{error && <p className="error-message" role="alert">{error}</p>}</>;
+    <div className="audit-filter-actions"><button className="admin-secondary" type="button" onClick={clear}><RotateCcw size={15} aria-hidden="true" />Clear filters</button></div>
+  </div>{error && <p className="error-message" role="alert">{error}</p>}</>;
 }
 
 export function AuditLogs({ search, navigate }: { search: string; navigate: (path: string) => void }) {
@@ -42,7 +73,7 @@ export function AuditLogs({ search, navigate }: { search: string; navigate: (pat
     if (key !== 'page') params.set('page', '1');
     navigate(`/admin/audit-logs?${params}`);
   }
-  return <div className="admin-content"><AdminPageHeading eyebrow="GOVERNANCE" title="Audit log" description="A read-only history of administrator changes and historical snapshots." /><AuditFilters key={search} search={search} onApply={params => navigate(`/admin/audit-logs${params.size ? '?' + params : ''}`)} />
+  return <div className="admin-content"><AdminPageHeading eyebrow="GOVERNANCE" title="Audit log" description="A read-only history of administrator changes and historical snapshots." /><AuditFilters search={search} navigate={navigate} />
     {error ? <Failure error={error} retry={retry} /> : !data ? <LoadingState /> : <><div className="admin-card audit-log-card">{data.items.length ? data.items.map(event => <div className="audit-event" key={event.id}><button className="audit-event-heading" aria-expanded={expanded === event.id} onClick={() => setExpanded(expanded === event.id ? undefined : event.id)}><span><strong>{actionLabels[event.action]}</strong><small>{event.target.fullName} · {event.target.studentNumber} · {event.actor.fullName}</small></span><span>{timestamp(event.createdAt)} {expanded === event.id ? <ChevronDown size={15} /> : <ChevronRight size={15} />}</span></button>{expanded === event.id && <div className="change-list"><p>Actor: {event.actor.fullName} · {event.actor.email}</p><p>Student: {event.target.fullName} · {event.target.email}</p>{Object.keys(event.changes).length ? Object.entries(event.changes).map(([field, change]) => <div key={field}><strong>{field}</strong><span>{String(change.before ?? 'Not set')} → {String(change.after ?? 'Not set')}</span></div>) : <span>No profile fields changed.</span>}</div>}</div>) : <div className="admin-empty">No audit events match these filters.</div>}</div><Pagination data={data} onChange={update} /></>}
   </div>;
 }

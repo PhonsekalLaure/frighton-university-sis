@@ -3,7 +3,7 @@ export type AccountStatus = 'open' | 'paid' | 'void';
 export type HoldType = 'library_debt' | 'academic_probation' | 'financial_delinquency' | 'disciplinary';
 
 export interface TermSeed { code: string; name: string; startDate: string; endDate: string; isActive: boolean; }
-export interface CourseSeed { courseCode: string; title: string; description: string; credits: number; department: string; }
+export interface CourseSeed { courseCode: string; title: string; description: string; units: number; department: string; }
 export interface SectionSeed { courseCode: string; termCode: string; sectionNumber: string; instructorName: string; instructorEmail: string; schedule: string; room: string; }
 export interface AdminSeed { firstName: string; middleName?: string; lastName: string; email: string; }
 export interface StudentSeed { studentNumber: string; firstName: string; middleName?: string; lastName: string; email: string; department: string; program: string; yearLevel: number; academicStatus: AcademicStatus; avatarUrl: string; }

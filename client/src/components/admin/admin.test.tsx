@@ -57,13 +57,11 @@ test('audit validation, corrected filter recovery, historical snapshots and Mani
   render(<Harness initial="/admin/audit-logs" />);
   expect(await screen.findByText('Previous filter failed')).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Actor UUID'), { target: { value: 'bad' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
   expect(screen.getByText('actorId must be a UUID.')).toBeInTheDocument(); expect(get).toHaveBeenCalledOnce();
   fireEvent.change(screen.getByLabelText('Actor UUID'), { target: { value: adminUser.id } });
   fireEvent.change(screen.getByLabelText('From (Manila)'), { target: { value: '2026-10-20' } });
   fireEvent.change(screen.getByLabelText('To (Manila)'), { target: { value: '2026-10-21' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
-  expect(await screen.findByText('Profile updated')).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: /Profile updated/ })).toBeInTheDocument();
   expect(screen.queryByText('Previous filter failed')).not.toBeInTheDocument();
   const query = new URLSearchParams(window.location.search);
   expect(query.get('from')).toBe('2026-10-20T00:00:00.000+08:00');
@@ -92,12 +90,81 @@ test('student-list search is debounced, departments retain spaces, and records o
   fireEvent.change(department, { target: { value: 'Computer ' } });
   expect(department).toHaveValue('Computer ');
   fireEvent.change(department, { target: { value: 'Computer Studies' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
   await waitFor(() => expect(get.mock.calls.at(-1)?.[0]).toContain('department=Computer+Studies'));
   get.mockResolvedValue(detail);
   const open = await screen.findByRole('button', { name: `Open ${student.fullName}` });
   open.focus(); fireEvent.click(open);
   expect(await screen.findByRole('heading', { name: student.fullName, level: 1 })).toBeInTheDocument();
+});
+
+test('student filters keep pending text when a dropdown changes and reset pagination automatically', async () => {
+  get.mockResolvedValue(page([student]));
+  render(<Harness initial="/admin/students?page=3&pageSize=50" />);
+  expect(await screen.findByText(student.fullName)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Apply filters' })).not.toBeInTheDocument();
+  vi.useFakeTimers();
+  const department = screen.getByLabelText('Department');
+  department.focus();
+  fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'Demo ' } });
+  fireEvent.change(department, { target: { value: 'Computer Studies ' } });
+  expect(get).toHaveBeenCalledOnce();
+  fireEvent.change(screen.getByLabelText('Access'), { target: { value: 'active' } });
+  fireEvent.change(screen.getByLabelText('Academic status'), { target: { value: 'probation' } });
+  expect(screen.getByLabelText('Search')).toHaveValue('Demo ');
+  expect(department).toHaveValue('Computer Studies ');
+  await act(async () => { await vi.advanceTimersByTimeAsync(299); });
+  expect(new URLSearchParams(window.location.search).has('department')).toBe(false);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  const query = new URLSearchParams(window.location.search);
+  expect(Object.fromEntries(query)).toMatchObject({ q: 'Demo', department: 'Computer Studies', accessStatus: 'active', academicStatus: 'probation', page: '1', pageSize: '50' });
+  expect(department).toHaveFocus();
+  expect(department).toHaveValue('Computer Studies ');
+});
+
+test('audit action and dates apply immediately, validate ranges, and UUID typing is debounced without losing focus', async () => {
+  get.mockResolvedValue(page([event]));
+  render(<Harness initial="/admin/audit-logs?page=3&pageSize=50" />);
+  expect(await screen.findByText('Profile updated')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Apply filters' })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Action'), { target: { value: event.action } });
+  expect(new URLSearchParams(window.location.search).get('action')).toBe(event.action);
+  fireEvent.change(screen.getByLabelText('From (Manila)'), { target: { value: '2026-10-21' } });
+  const calls = get.mock.calls.length;
+  fireEvent.change(screen.getByLabelText('To (Manila)'), { target: { value: '2026-10-20' } });
+  expect(screen.getByRole('alert')).toHaveTextContent('Start date must not be after end date.');
+  expect(get).toHaveBeenCalledTimes(calls);
+  fireEvent.change(screen.getByLabelText('To (Manila)'), { target: { value: '2026-10-22' } });
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  vi.useFakeTimers();
+  const uuid = screen.getByLabelText('Student UUID');
+  uuid.focus();
+  fireEvent.change(uuid, { target: { value: student.id } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(299); });
+  expect(new URLSearchParams(window.location.search).has('studentId')).toBe(false);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(Object.fromEntries(new URLSearchParams(window.location.search))).toMatchObject({ studentId: student.id, action: event.action, page: '1', pageSize: '50', from: '2026-10-21T00:00:00.000+08:00', to: '2026-10-22T23:59:59.999+08:00' });
+  expect(uuid).toHaveFocus();
+});
+
+test.each([
+  ['/admin/students', 'Department', 'Computer Studies'],
+  ['/admin/students?q=Demo&department=Science&accessStatus=active&academicStatus=probation&page=2', 'Search', 'Pending'],
+  ['/admin/audit-logs', 'Student UUID', student.id],
+  [`/admin/audit-logs?studentId=${student.id}&actorId=${adminUser.id}&action=${event.action}&from=2026-10-20&to=2026-10-22&page=2`, 'Actor UUID', 'bad'],
+])('clear filters resets inputs and cancels pending changes on %s', async (initial, label, value) => {
+  get.mockResolvedValue(page([]));
+  render(<Harness initial={initial} />);
+  expect(await screen.findByText(/No (students|audit events) match these filters/)).toBeInTheDocument();
+  vi.useFakeTimers();
+  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+  expect(window.location.search).toBe('');
+  for (const input of screen.getByRole('search').querySelectorAll('input, select')) expect(input).toHaveValue('');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  const calls = get.mock.calls.length;
+  await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+  expect(window.location.search).toBe('');
+  expect(get).toHaveBeenCalledTimes(calls);
 });
 
 test('edit forms disable unchanged saves and send only changed nullable fields', async () => {

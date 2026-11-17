@@ -8,7 +8,7 @@ import { payments } from '../seed-data/payments.js';
 import { sections } from '../seed-data/sections.js';
 import { studentAccounts } from '../seed-data/studentAccounts.js';
 import { students } from '../seed-data/students.js';
-import { terms } from '../seed-data/terms.js';
+import { legacyTermCodes, terms } from '../seed-data/terms.js';
 import { assertSISLMSProject } from './projectGuard.js';
 
 const DEFAULT_STUDENT_PASSWORD = 'Student2026!';
@@ -24,6 +24,25 @@ export async function seedDatabase(client?: SupabaseClient): Promise<void> {
   assertSISLMSProject();
   const supabase = client ?? getSupabaseAdmin();
 
+  // Preserve term UUIDs (and all existing references) when replacing seasonal
+  // fixture codes. Refuse an ambiguous merge before any account/password writes.
+  const { data: existingTerms, error: existingTermsError } = await supabase.from('academic_terms')
+    .select('id, code').in('code', [...Object.keys(legacyTermCodes), ...Object.values(legacyTermCodes)]);
+  failOnError(existingTermsError, 'Reading existing seed terms');
+  for (const [legacy, canonical] of Object.entries(legacyTermCodes)) {
+    const oldTerm = existingTerms?.find(term => term.code === legacy);
+    if (!oldTerm) continue;
+    if (existingTerms?.some(term => term.code === canonical)) {
+      throw new Error(`Both ${legacy} and ${canonical} exist. Review the term mapping before seeding.`);
+    }
+  }
+  for (const [legacy, canonical] of Object.entries(legacyTermCodes)) {
+    const oldTerm = existingTerms?.find(term => term.code === legacy);
+    if (!oldTerm) continue;
+    const { error } = await supabase.from('academic_terms').update({ code: canonical }).eq('id', oldTerm.id);
+    failOnError(error, `Renaming seed term ${legacy}`);
+  }
+
   const { error: termsError } = await supabase.from('academic_terms').upsert(
     terms.map((term) => ({
       code: term.code, name: term.name, start_date: term.startDate, end_date: term.endDate, is_active: term.isActive,
@@ -35,7 +54,9 @@ export async function seedDatabase(client?: SupabaseClient): Promise<void> {
   const { error: coursesError } = await supabase.from('courses').upsert(
     courses.map((course) => ({
       course_code: course.courseCode, title: course.title, description: course.description,
-      credits: course.credits, department: course.department,
+      // The existing database/API field is retained for compatibility; its
+      // value is the subject's academic unit count.
+      credits: course.units, department: course.department,
     })),
     { onConflict: 'course_code' }
   );
@@ -195,15 +216,32 @@ export async function seedDatabase(client?: SupabaseClient): Promise<void> {
     failOnError(error, `Upserting payment ${payment.referenceNumber}`);
   }
 
-  for (const record of academicRecords) {
+  const desiredRecordKeys = new Set<string>();
+  const recordRows = academicRecords.map(record => {
     const studentId = studentIds.get(record.studentNumber);
     const termId = termIds.get(record.termCode);
     const sectionId = termId ? sectionIds.get(makeKey(record.courseCode, termId, record.sectionNumber)) : undefined;
     if (!studentId || !sectionId) throw new Error(`Unknown student or section for ${record.studentNumber}/${record.courseCode}.`);
-    const { error } = await supabase.from('academic_records').upsert({
+    desiredRecordKeys.add(makeKey(studentId, sectionId));
+    return {
       student_id: studentId, section_id: sectionId, grade: record.grade, is_current: record.isCurrent,
-    }, { onConflict: 'student_id,section_id' });
-    failOnError(error, `Upserting record ${record.studentNumber}/${record.courseCode}`);
+    };
+  });
+  const { error: recordsError } = await supabase.from('academic_records').upsert(recordRows, { onConflict: 'student_id,section_id' });
+  failOnError(recordsError, 'Upserting seeded academic records');
+
+  // Only the ten fixture students' assignments are reconciled. Insert the new
+  // records first so a failed upsert never removes their existing transcript.
+  const seededStudentIds = [...studentIds.values()];
+  const { data: existingRecords, error: existingRecordsError } = await supabase.from('academic_records')
+    .select('id,student_id,section_id').in('student_id', seededStudentIds);
+  failOnError(existingRecordsError, 'Reading seeded academic records');
+  const staleIds = (existingRecords ?? [])
+    .filter(record => !desiredRecordKeys.has(makeKey(record.student_id, record.section_id)))
+    .map(record => record.id);
+  if (staleIds.length) {
+    const { error } = await supabase.from('academic_records').delete().in('id', staleIds).in('student_id', seededStudentIds);
+    failOnError(error, 'Removing obsolete seeded academic records');
   }
 
   for (const hold of holds) {

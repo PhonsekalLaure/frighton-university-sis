@@ -1,13 +1,37 @@
+import { courses } from './courses.js';
+import { curricula } from './curricula.js';
 import type { SectionSeed } from './types.js';
 
-export const sections: readonly SectionSeed[] = [
-  { courseCode: 'CS-101', termCode: 'FALL-2025', sectionNumber: '01', instructorName: 'Dr. Ada Lovelace', instructorEmail: 'ada.lovelace@frighton.edu', schedule: 'Mon/Wed 09:00 - 10:30 AM', room: 'Turing Hall 101' },
-  { courseCode: 'CS-220', termCode: 'FALL-2025', sectionNumber: '01', instructorName: 'Dr. Alan Turing', instructorEmail: 'alan.turing@frighton.edu', schedule: 'Tue/Thu 11:00 - 12:30 PM', room: 'Lovelace Lab 204' },
-  { courseCode: 'HIST-105', termCode: 'FALL-2025', sectionNumber: '01', instructorName: 'Prof. Mina Harker', instructorEmail: 'mina.harker@frighton.edu', schedule: 'Fri 01:00 - 04:00 PM', room: 'Grimoire Amphitheater' },
-  { courseCode: 'CS-101', termCode: 'SPRING-2026', sectionNumber: '01', instructorName: 'Dr. Ada Lovelace', instructorEmail: 'ada.lovelace@frighton.edu', schedule: 'Mon/Wed 09:00 - 10:30 AM', room: 'Turing Hall 101' },
-  { courseCode: 'CS-220', termCode: 'SPRING-2026', sectionNumber: '01', instructorName: 'Dr. Alan Turing', instructorEmail: 'alan.turing@frighton.edu', schedule: 'Tue/Thu 11:00 - 12:30 PM', room: 'Lovelace Lab 204' },
-  { courseCode: 'HIST-105', termCode: 'SPRING-2026', sectionNumber: '01', instructorName: 'Prof. Mina Harker', instructorEmail: 'mina.harker@frighton.edu', schedule: 'Fri 01:00 - 04:00 PM', room: 'Grimoire Amphitheater' },
-  { courseCode: 'CS-101', termCode: 'FALL-2026', sectionNumber: '01', instructorName: 'Dr. Ada Lovelace', instructorEmail: 'ada.lovelace@frighton.edu', schedule: 'Mon/Wed 09:00 - 10:30 AM', room: 'Turing Hall 101' },
-  { courseCode: 'CS-220', termCode: 'FALL-2026', sectionNumber: '01', instructorName: 'Dr. Alan Turing', instructorEmail: 'alan.turing@frighton.edu', schedule: 'Tue/Thu 11:00 - 12:30 PM', room: 'Lovelace Lab 204' },
-  { courseCode: 'HIST-105', termCode: 'FALL-2026', sectionNumber: '01', instructorName: 'Prof. Mina Harker', instructorEmail: 'mina.harker@frighton.edu', schedule: 'Fri 01:00 - 04:00 PM', room: 'Grimoire Amphitheater' },
+const faculty: Record<string, readonly string[]> = {
+  'Biological Sciences': ['Elena Cruz', 'Rafael Mendoza', 'Isabel Reyes', 'Marco Santos', 'Beatriz Lim', 'Andres Flores'],
+  'Computer Science': ['Miguel Garcia', 'Patricia Tan', 'Paolo Ramos', 'Camille Navarro', 'Lorenzo Dizon', 'Angela Uy'],
+  Humanities: ['Sofia Villanueva', 'Gabriel Castillo', 'Lucia Mercado', 'Daniel Aquino', 'Mariana Torres', 'Emilio Pascual'],
+  Mathematics: ['Teresa Bautista', 'Nicolas Valdez', 'Carmen Salazar', 'Luis Fernandez', 'Diana Santiago', 'Antonio Rivera'],
+};
+const meetings = [
+  'Mon/Wed 08:00 - 09:30', 'Mon/Wed 09:45 - 11:15',
+  'Tue/Thu 08:00 - 09:30', 'Tue/Thu 09:45 - 11:15',
+  'Mon/Wed 13:00 - 14:30', 'Fri 08:00 - 11:00',
 ];
+const laboratories = ['Fri 13:00 - 16:00', 'Thu 14:45 - 17:45', 'Wed 14:45 - 17:45', 'Tue 14:45 - 17:45'];
+const courseByCode = new Map(courses.map(course => [course.courseCode, course]));
+
+export const sections: readonly SectionSeed[] = curricula.flatMap(curriculum => {
+  const plans = [
+    ...(curriculum.previous ? [
+      { termCode: 'AY2025-2026-T1', subjects: curriculum.previous[0] },
+      { termCode: 'AY2025-2026-T2', subjects: curriculum.previous[1] },
+    ] : []),
+    { termCode: 'AY2026-2027-T1', subjects: curriculum.current },
+  ];
+  return plans.flatMap(({ termCode, subjects }) => subjects.map((courseCode, index) => {
+    const course = courseByCode.get(courseCode);
+    if (!course) throw new Error(`Unknown seed subject ${courseCode}.`);
+    const instructor = faculty[curriculum.department][(index + curriculum.facultyOffset) % 6];
+    const schedule = course.units === 2 ? 'Fri 08:00 - 10:00'
+      : course.units === 4 ? `${meetings[index]}; ${laboratories[index]}` : meetings[index];
+    return { courseCode, termCode, sectionNumber: `${curriculum.key}-01`,
+      instructorName: `Prof. ${instructor}`, instructorEmail: `${instructor.toLowerCase().replaceAll(' ', '.')}@frighton.edu`,
+      schedule, room: course.units === 4 ? `${curriculum.room} Laboratory` : curriculum.room };
+  }));
+});

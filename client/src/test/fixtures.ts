@@ -3,7 +3,7 @@ import type { AdminDashboard, AuditEvent, Page, Student, StudentDetail } from '.
 
 export const studentUser: SignedInUser = { id: '11111111-1111-4111-8111-111111111111', fullName: 'Demo Student', email: 'student@example.invalid', role: 'student' };
 export const adminUser: SignedInUser = { id: '22222222-2222-4222-8222-222222222222', fullName: 'Demo Admin', email: 'admin@example.invalid', role: 'admin' };
-export const term = { id: 'term-current', code: '2026-FALL', name: 'Fall 2026', startDate: '2026-08-01', endDate: '2026-12-20', isActive: true };
+export const term = { id: 'term-current', code: 'AY2026-2027-T1', name: 'First Term, AY 2026–2027', startDate: '2026-08-10', endDate: '2026-12-18', isActive: true };
 export const student: Student = {
   id: studentUser.id, fullName: studentUser.fullName, firstName: 'Demo', middleName: null, lastName: 'Student',
   email: studentUser.email, studentNumber: 'STU-2026-0042', department: 'Computer Studies', program: 'BS Computer Science',
@@ -27,7 +27,7 @@ export const currentStatement: BillingStatement = {
   payments: [{ id: 'payment-current', amount: 100, referenceNumber: 'CURRENT-RECEIPT', receiptStatus: 'completed', paidAt: '2026-10-20T16:30:00Z', paymentChannel: 'cashier' }],
 };
 export const oldStatement: BillingStatement = {
-  ...currentStatement, id: 'statement-old', term: { ...term, id: 'term-old', code: '2025-FALL', name: 'Fall 2025', startDate: '2025-08-01', endDate: '2025-12-20', isActive: false },
+  ...currentStatement, id: 'statement-old', term: { ...term, id: 'term-old', code: 'AY2025-2026-T1', name: 'First Term, AY 2025–2026', startDate: '2025-08-11', endDate: '2025-12-19', isActive: false },
   payments: [{ ...currentStatement.payments[0], id: 'payment-old', referenceNumber: 'OLD-RECEIPT' }],
 };
 export const billing: BillingData = {

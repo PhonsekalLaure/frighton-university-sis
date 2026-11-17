@@ -69,5 +69,16 @@ test('the shared schedule presents instructor and assignment data without write 
   render(<ScheduleRecords data={schedule} />);
   expect(screen.getByText('CS101 · Programming')).toBeInTheDocument();
   expect(screen.getByText('instructor@example.invalid')).toBeInTheDocument();
+  expect(screen.getByText('3 units · Section A')).toBeInTheDocument();
+  expect(screen.getByText('First Term, AY 2026–2027')).toBeInTheDocument();
+  expect(screen.queryByText(/credits/i)).not.toBeInTheDocument();
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
+});
+
+test('transcript groups subjects by academic term and presents academic totals in units', () => {
+  render(<GradeRecords data={grades} />);
+  expect(screen.getByRole('heading', { name: 'First Term, AY 2026–2027' })).toBeInTheDocument();
+  for (const label of ['Units attempted', 'Units earned', 'Units', 'Subject']) expect(screen.getByText(label)).toBeInTheDocument();
+  expect(screen.getByText('3 units attempted · 3 units earned')).toBeInTheDocument();
+  expect(screen.queryByText(/credits|fall|spring|semester/i)).not.toBeInTheDocument();
 });
