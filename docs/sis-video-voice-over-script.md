@@ -72,73 +72,67 @@ Read the quoted text aloud. Italicized directions are recording cues. Use demo a
 >
 > Payments are handled through the university cashier. This page allows students to review the amounts and payments recorded in their account.
 
-## 6. Library: account information
+## 6. Library: start with an empty account
 
-*Open “Library.” Show My Reservations, Current Loans, and Unpaid Library Amounts.*
+*Use an eligible demo student with no active reservations, current loans, unpaid library amounts, active holds, or resolved holds. Library self-service must be enabled, with at least three distinct books available to reserve. Open “Library” and show the empty My Reservations, Current Loans, and Unpaid Library Amounts sections. “Empty” refers to the student's account; the catalog should contain books.*
 
 > The Library page connects students with library services through the SIS.
 >
-> My Reservations displays books reserved for pickup, together with their pickup location and expiration time.
+> We're starting with an empty library account. This student has no active reservations, current loans, or unpaid library amounts.
 >
-> Current Loans shows borrowed books, their due dates, and whether they are overdue.
+> Reservations will appear under My Reservations, while borrowed books and their due dates will appear under Current Loans.
 >
-> Unpaid Library Amounts displays recorded fines or replacement charges. Any accruing overdue estimate is identified on the page.
->
-> Students can review these amounts here and visit the library desk to settle charges.
+> Any unpaid fines or replacement charges would be displayed in Unpaid Library Amounts.
 
-*If there are no records, use this line:*
+## 7. Library: search and reserve three books
 
-> This account currently has no records in this section. Reservations, loans, or unpaid amounts will appear here when applicable.
-
-## 7. Library: catalog search and reservation
-
-*Search by title or author. If multiple catalog pages exist, demonstrate “Next” and “Previous.” Choose an available book and select “Reserve for pickup.”*
+*Search by title or author and select “Search.” Show the matching titles, authors, and available copies. Select “Reserve for pickup” for the first book and wait for confirmation. Search again as needed and repeat for two other distinct books, waiting for each confirmation. Return to My Reservations and show all three reservations.*
 
 > Students can search the catalog by title or author.
 >
-> Each result displays the book's title, author, and available copies. Page controls allow students to browse additional results.
+> Each result displays the book's title, author, and number of available copies.
 >
-> To reserve an eligible book, we select “Reserve for pickup.”
+> We'll choose an available book and select “Reserve for pickup.” Once confirmed, the book appears under My Reservations.
 >
-> Once the reservation is confirmed, it appears under My Reservations with its pickup details and expiration time.
-
-*If reservation eligibility is blocked, use this line instead of attempting a reservation:*
-
-> This account is currently restricted from making reservations. The page explains the restriction and provides a “Review Holds” button so the student can check the required next steps.
-
-## 8. Library: cancellation
-
-*Select “Cancel reservation,” demonstrate “Keep reservation,” then reopen the prompt and select “Confirm cancellation.”*
-
-> Students can also cancel an active reservation.
+> We'll repeat the process for two more books.
 >
-> Selecting “Cancel reservation” opens a confirmation prompt. “Keep reservation” leaves the booking in place.
+> We now have three active reservations. Each one shows its pickup location, reservation time, and expiration time.
+
+## 8. Library: cancel one reservation
+
+*With all three reservations visible, select “Cancel reservation” for one book, then select “Confirm cancellation.” Wait for the success message and show the two remaining reservations.*
+
+> If a student no longer needs a reserved book, they can cancel its reservation.
 >
-> To proceed, we select “Confirm cancellation.” Once confirmed, the reservation is removed and the reserved copy is released.
-
-*If Library self-service is disabled in the version you record, replace scenes 6–8 with:*
-
-> The Library page is the access point for integrated library services.
+> We'll select “Cancel reservation” for one of these three books, then choose “Confirm cancellation.”
 >
-> In this environment, Library self-service is not yet available. The page displays a notice explaining that catalog search, reservations, loans, and fine information will become available when the connection is enabled.
+> The cancelled reservation is removed, leaving two active reservations ready for pickup.
+>
+> Next, we'll check the student's Holds page.
 
-## 9. Holds
+## 9. Holds: empty account and active-hold screenshot
 
-*Open “Holds.” Review active restrictions and resolved history. Demonstrate “Open Library” or “Open Billing” where shown, then return.*
+*Open “Holds” immediately after the reservation cancellation. Show “No active holds” and the account-clear message, then scroll to the empty Resolved Holds section.*
 
 > The Holds page displays restrictions affecting the student's university account.
 >
-> Each active hold includes its type, reason, source, placement date, and clearance guidance.
+> This student currently has no active holds, so the page confirms that the account is clear.
 >
-> Where applicable, a shortcut opens Library or Billing for related information.
+> The resolved holds section is also empty because there is no recorded hold history for this account.
 >
-> Resolved holds appear in a separate history section, including their resolution dates.
->
-> Students follow the displayed guidance and coordinate with the responsible university office for clearance.
+> The two book reservations remain in Library. Reservations are separate from account holds.
 
-*If the account has no active holds:*
+*Display the screenshot of another student's account with an active hold. Add an on-screen label such as “Example: active hold on another account.” Point out the hold type, reason, source, placement date, and clearance guidance visible in the screenshot. This is a still image; describe any visible navigation buttons without attempting to click them.*
 
-> This account currently has no active holds. Any resolved restrictions remain available in the history below.
+> To show how an active hold appears, we're displaying a screenshot from another student account.
+>
+> Here, the page identifies the active restriction and provides its reason, source, and placement date, together with guidance on the next steps for clearance.
+>
+> The student can use this information to coordinate with the responsible university office.
+
+*Return from the screenshot to the live demo account's empty Holds page before continuing to Student Profile.*
+
+> Returning to our demo account, there are no active holds. We'll now continue to Student Profile.
 
 ## 10. Student profile and password change
 
@@ -154,7 +148,7 @@ Read the quoted text aloud. Italicized directions are recording cues. Use demo a
 
 > Students can change their password by entering their current password and confirming a new one.
 >
-> The new password must contain twelve to one hundred twenty-eight characters and must differ from the current password.
+> The new password must contain at least twelve characters and must differ from the current password.
 >
 > This changes the shared university password used for both SIS and LMS.
 >
@@ -196,7 +190,7 @@ Read the quoted text aloud. Italicized directions are recording cues. Use demo a
 
 ## 13. Create a student account
 
-*Select “Create account.” Enter demo details, select a department and academic status, and upload an optional photo. Demonstrate removing and replacing the selected photo if desired. Submit the form.*
+*Select “Create account.” Enter demo details using an email inbox you can access, select a department and academic status, and upload an optional photo. Demonstrate removing and replacing the selected photo if desired. Submit the form.*
 
 > To add a student, we select “Create account” and enter the student's personal and academic details.
 >
@@ -208,59 +202,57 @@ Read the quoted text aloud. Italicized directions are recording cues. Use demo a
 >
 > Once saved, the system opens the student's detail page, where the administrator can review the account and its invitation status.
 
-## 14. Student details and profile editing
+## 14. View the newly created student's information
 
-*Open a populated student record. Select “Edit profile,” change a demo field or photo, and select “Save changes.”*
+*Remain on the student detail page displayed after account creation. Show the generated student number, saved personal and academic information, access status, authentication status, and invitation status. Leave editing for scene 18.*
 
-> The student detail page brings together account access, authentication information, academic profile details, and student records.
+> After creating the account, the system displays the new student's information.
 >
-> To update the student's information, we select “Edit profile,” make the necessary changes, and save.
+> We can review the automatically assigned student number, university email, academic profile, and account access status.
 >
-> Administrators can also replace or remove the student's profile photo.
-
-*If demonstrating an email change, use a controlled demo address and show the additional confirmation.*
-
-> Changing the university email requires an additional confirmation because it changes the student's shared login for both SIS and LMS.
+> The authentication section also shows the account's confirmation and invitation information.
 >
-> The administrator can return to editing or confirm the email change.
+> Next, we'll open the email inbox used for this account and complete the student's password setup.
 
-## 15. Deactivate and reactivate access
+*If the invitation is pending or failed and “Send invitation” is available, request it and check the displayed result before switching to the inbox. If delivery is unconfirmed or requires review, follow the displayed guidance before continuing.*
 
-*On a demo account, select “Deactivate,” confirm, then select “Reactivate” and confirm.*
+## 15. Open the invitation email and set the password
 
-> Administrators can deactivate a student's SIS access through a confirmation step.
+*Switch to the email inbox entered during account creation. Open the SIS invitation email and follow its password setup link. Enter and confirm a password, select “Set password,” then select “Go to sign in.” Keep passwords and the invitation link hidden in the recording.*
+
+> In the email inbox used to create the student account, we open the university invitation email.
 >
-> Deactivation prevents subsequent SIS requests while preserving the student's academic records and academic status.
+> Following the invitation link opens the password setup page.
 >
-> To restore access, the administrator selects “Reactivate” and confirms the action.
-
-## 16. Invitations and recovery instructions
-
-*Use an unconfirmed demo account to show “Send invitation” or “Resend invitation.” Use a confirmed demo account to show “Send recovery instructions.” Confirm email requests only for an inbox you control.*
-
-> Available email actions depend on the student's authentication status.
+> The student enters a password containing twelve to one hundred twenty-eight characters, confirms it, and selects “Set password.”
 >
-> For an account awaiting confirmation, the administrator can send or resend an invitation when the option is available.
->
-> For an account with a confirmed email, the administrator can request password recovery instructions.
->
-> Each request requires confirmation. The administrator should check the displayed result, which distinguishes the email request from confirmed inbox delivery.
+> After the password is set successfully, we select “Go to sign in” to access the new account.
 
-## 17. Student password setup or recovery page
+*If the link is expired or already used, use this alternate line and obtain a fresh invitation before continuing:*
 
-*If a valid invitation or recovery email is available, open its link, enter and confirm a password, select “Set password,” then select “Go to sign in.”*
+> This invitation link is no longer valid. The student needs a fresh link from Administration to complete password setup.
 
-> The invitation or recovery link opens the password setup page.
+## 16. Sign in with the new student account and return to Administration
+
+*If the original administrator session is still active in the recording browser, sign out of it first. On the login page, enter the newly created student's email and password and select “Sign in.” Show the Overview page and open “Student profile” to verify the saved details.*
+
+> We'll now sign in using the newly created student's university email and password.
 >
-> The student enters and confirms a password, then selects “Set password.”
+> A successful sign-in opens the student portal.
 >
-> After a successful update, the student can return to the sign-in page and use the new password.
+> We can check the student's identity on the Overview page and open Student Profile to review the information entered during account creation.
 >
-> If the link has expired or has already been used, the page directs the student to contact Administration for a fresh link.
+> Academic and billing records will appear as they are recorded by the university.
 
-## 18. Administrator review of student records
+*Select “Sign out,” then sign in again using the administrator account. Open “Student accounts” and select the newly created student.*
 
-*Return to the administrator's student detail page. Visit every tab: Overview, Schedule, Grades, Holds, and Billing. Change terms in Grades and statements in Billing.*
+> After checking the new student account, we sign out and return using the administrator account.
+>
+> From Student Accounts, we reopen the student's record to continue the administrative review.
+
+## 17. Administrator review of student records
+
+*Visit every tab: Overview, Schedule, Grades, Holds, and Billing. A newly created account may have no academic or billing records yet; show the empty states where applicable. To demonstrate populated records, open an existing demo student and change terms in Grades and statements in Billing, then return to the newly created student's detail page before editing.*
 
 > Administrators can review five record tabs for each student.
 >
@@ -276,7 +268,41 @@ Read the quoted text aloud. Italicized directions are recording cues. Use demo a
 >
 > These tabs support record review. The account-management controls handle changes to the student's profile and access.
 
-## 19. Audit history
+*For an empty record section, use this line:*
+
+> This newly created student does not have records in this section yet. Recorded information will appear here when available.
+
+## 18. Edit the student account
+
+*On the newly created student's detail page, select “Edit profile.” Change a demo field or photo, then select “Save changes.” Show the updated information.*
+
+> With the account setup and record review complete, we'll update the student's information.
+>
+> We select “Edit profile,” make the necessary changes, and select “Save changes.”
+>
+> Administrators can also replace or remove the student's profile photo.
+>
+> The updated information appears on the student detail page after saving.
+
+*If demonstrating an email change, use an inbox you control and show the additional confirmation.*
+
+> Changing the university email requires an additional confirmation because it changes the student's shared login for both SIS and LMS.
+>
+> The administrator can return to editing or confirm the email change.
+
+## 19. Deactivate and reactivate access
+
+*On the newly created demo account, select “Deactivate,” confirm, then select “Reactivate” and confirm. Show the access status after each action.*
+
+> Administrators can deactivate a student's SIS access through a confirmation step.
+>
+> Deactivation prevents subsequent SIS requests while preserving the student's academic records and academic status.
+>
+> To restore access, the administrator selects “Reactivate” and confirms the action.
+>
+> The access status updates to show that the account is active again.
+
+## 20. Audit history
 
 *Select “View audit history for this student.” Expand an event, then demonstrate the action and date filters. Clear the filters to show the broader history.*
 
@@ -294,7 +320,7 @@ Read the quoted text aloud. Italicized directions are recording cues. Use demo a
 >
 > The audit log provides a read-only history of administrative changes.
 
-## 20. Administrator sign-out and closing
+## 21. Administrator sign-out and closing
 
 *Return to the dashboard if desired, then select “Sign out.”*
 
